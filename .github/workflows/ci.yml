@@ -1,0 +1,22 @@
+name: smoke
+on: [push, pull_request]
+
+jobs:
+  smoke:
+    # Both OSes on purpose. The encoding bugs this project hit were Windows-only
+    # (cp1252 consoles) and the LF/CRLF trap bites the other way - a badge that
+    # covers one platform would be the wrong badge.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.9", "3.13"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0      # archaeology needs real history
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python tests/smoke.py

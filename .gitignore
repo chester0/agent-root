@@ -1,0 +1,15 @@
+# Agent/session tooling state. Untracked is not enough - these files sit in the
+# working directory, so a `cp -r` or a folder-based publish carries them along.
+# One of them is a session replay log.
+.omc/
+.claude/
+.venv/
+__pycache__/
+*.pyc
+
+# Generated views. They are derived from the source of truth and regenerating is
+# cheap; committing them invites the stale-copy-gets-believed failure this tool
+# exists to prevent.
+MAP.md
+TRAPS.md
+CANDIDATES.md

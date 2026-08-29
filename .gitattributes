@@ -1,0 +1,10 @@
+# LF everywhere, checked in and checked out.
+#
+# This project ships a trap that says a CRLF shebang fails on Linux as
+# "/system/bin/sh^M: bad interpreter" and reads as a broken script. Shipping
+# CRLF from a repo that warns about CRLF would be the first thing a reviewer
+# screenshots - and the CI matrix runs on Ubuntu, where it would actually break.
+* text=auto eol=lf
+*.py text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
