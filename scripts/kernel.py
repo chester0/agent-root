@@ -51,6 +51,7 @@ import sys
 from collections import Counter
 
 NL = chr(10)
+DESC_RE = r"^description:[^\S\r\n]*\S"
 
 for _s in (sys.stdout, sys.stderr):
     try:
@@ -390,6 +391,10 @@ description: AGENT ROOT - the resident reviewer for this repository. Use when re
 This file is an adapter. The contract is `AGENT-ROOT.md` - portable markdown that
 any assistant can follow. Read it first, then `AGENTS.md` for this repo's facts.
 
+`.claude/skills/` is a project-skill location for GitHub Copilot too, so this one
+file answers `/agent-root` in Claude Code and in Copilot, and both load it
+automatically when the description matches the task.
+
 ## Gather the evidence, then judge it
 
 ```bash
@@ -416,50 +421,19 @@ they reach you, scoped to what you are touching.
 # document in each one. An ad-hoc `for f in ...; do cp` sync that included it
 # overwrote a repo's own 5-line README with this project's 312-line one. When
 # syncing by hand, sync THIS list, not a filename you happen to have edited.
+#
+# WARNING: DO NOT HAND-SYNC AT ALL - run `kernel.py install --target <repo>`.
+# This warning was written here after the first clobbering, and the clobbering
+# happened again within the hour, because a marker inside a source file cannot
+# intercept a shell loop someone is typing somewhere else. Tripwires are prompts,
+# not interlocks. The only fix that worked was removing the loop: install already
+# copies the right list and cannot touch README.md.
 INSTALL_FILES = [
     "AGENT-ROOT.md", "USING-AGENT-ROOT.md",
     "scripts/traps.py", "scripts/tripwires.py", "scripts/kernel.py",
     "scripts/drift.py", "scripts/verify.py", "scripts/review.py",
     "profiles/devops.py",
 ]
-
-
-PROMPT_FILE = '''---
-mode: agent
-description: Agent Root - review this repo's changes with receipts, never guesses.
----
-
-# Agent Root
-
-> **Root reviews with receipts. It never repairs, and it never guesses.**
-
-Read `AGENT-ROOT.md` for the full contract and `AGENTS.md` for this repo's facts,
-then follow them for this request.
-
-## Gather the evidence before judging it
-
-Run the gatherer and read its output before saying anything about a change:
-
-```bash
-python scripts/review.py                 # the working tree
-python scripts/review.py --commit HEAD   # a commit
-python scripts/review.py --pr 42         # a pull request
-```
-
-It reports what changed, which domains that touches, the traps already recorded
-there, whether an edited file is also running somewhere else, what history says
-usually changes alongside, and whether the change wrote down what it learned.
-
-## The output contract
-
-Answer in the fixed field shape from `AGENT-ROOT.md` section 6. Every field must
-be filled from command output. An empty field is not a pass - say the field is
-empty and say which command would fill it.
-
-If you could not check something, label the verdict GUESS. That label outranks a
-confident answer, and it is immediately followed by the command that would settle
-it.
-'''
 
 
 def cmd_install(root, target):
@@ -508,19 +482,21 @@ def cmd_install(root, target):
     os.makedirs(os.path.dirname(ci), exist_ok=True)
     if not os.path.exists(ci):
         io.open(ci, "w", encoding="utf-8", newline=NL).write(COPILOT)
-    # WARNING: Copilot has THREE separate mechanisms and they are not
-    # interchangeable. copilot-instructions.md is always-on and repo-wide;
-    # instructions/*.instructions.md fire on an applyTo glob; prompts/*.prompt.md
-    # is the only one a person can invoke BY NAME as /agent-root. Writing the
-    # first two and calling it done left the slash command working in Claude Code
-    # and silently absent in Copilot - the tool people actually have at work.
-    pf = os.path.join(target, ".github", "prompts", "agent-root.prompt.md")
-    os.makedirs(os.path.dirname(pf), exist_ok=True)
-    if not os.path.exists(pf):                      # same rule as the adapter
-        io.open(pf, "w", encoding="utf-8", newline=NL).write(PROMPT_FILE)
-    print("  wired for Claude Code:  .claude/skills/agent-root/SKILL.md   -> /agent-root")
-    print("  wired for Copilot:      .github/copilot-instructions.md      (always on)")
-    print("                          .github/prompts/agent-root.prompt.md -> /agent-root")
+    # ONE skill directory, read by BOTH assistants - do not add a second copy.
+    # `.claude/skills/` is a project-skill location for Copilot as well (alongside
+    # `.github/skills` and `.agents/skills`), in the CLI, in VS Code and for the
+    # cloud agent, where it both auto-loads on its description and answers
+    # `/agent-root`. It is therefore the INTERSECTION with Claude Code, not a
+    # Claude-only path.
+    #
+    # WARNING: a `.github/prompts/agent-root.prompt.md` was added here on the
+    # belief that Copilot had no skills. It was never checked, and it was wrong -
+    # a second copy of the same instructions, free to drift from the first, which
+    # is the duplication this project exists to prevent. Assert nothing about
+    # another tool's features without reading its documentation.
+    print("  wired: .claude/skills/agent-root/SKILL.md")
+    print("         -> /agent-root in Claude Code AND GitHub Copilot")
+    print("         .github/copilot-instructions.md  (Copilot, always on)")
 
     cwd = os.getcwd()
     try:
@@ -541,6 +517,35 @@ def cmd_check(root: str) -> int:
     # ⚠️ Caps are enforced, not remembered. AGENT-ROOT.md's cap once read "one
     # screen" - unmeasurable, and duly broken by the author while adding a rule
     # about measurement. A cap that is not an exit code is a wish.
+    # ⚠️ Skill frontmatter is validated because BOTH assistants read this
+    # directory and Copilot requires `name` to be lowercase-with-hyphens. An
+    # invalid name is not an error anyone sees - the skill is simply never
+    # offered, which looks identical to a skill that was never written. Checked
+    # here so a rename cannot silently un-publish a tripwire.
+    sk = os.path.join(root, ".claude", "skills")
+    if os.path.isdir(sk):
+        for d in sorted(os.listdir(sk)):
+            f = os.path.join(sk, d, "SKILL.md")
+            if not os.path.exists(f):
+                continue
+            head = io.open(f, encoding="utf-8", errors="replace").read(800)
+            m = re.search(r"^name:\s*(.+)$", head, re.M)
+            nm = m.group(1).strip() if m else ""
+            if not re.fullmatch(r"[a-z0-9]+(-[a-z0-9]+)*", nm or ""):
+                problems.append(
+                    "skill %s: name %r must be lowercase-with-hyphens or Copilot "
+                    "ignores it" % (d, nm))
+            elif nm != d:
+                problems.append(
+                    "skill %s: name %r does not match its directory" % (d, nm))
+            # WARNING: the class here excludes the newline on purpose. Written
+            # with plain backslash-s it also matched a line break, so the check
+            # walked past an EMPTY description onto the next line and could
+            # never fail. Found only by deleting a description and watching the
+            # check still pass - a test that cannot fail proves nothing.
+            if not re.search(DESC_RE, head, re.M):
+                problems.append("skill %s: no description - nothing can trigger it" % d)
+
     for fn, cap in (("AGENTS.md", 120), ("AGENT-ROOT.md", 160)):
         f = os.path.join(root, fn)
         if not os.path.exists(f):

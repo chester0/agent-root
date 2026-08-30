@@ -183,40 +183,42 @@ manifest:
 
 | Assistant | Mechanism | Fires on |
 |---|---|---|
-| Claude Code | `.claude/skills/agent-root/SKILL.md` | you type `/agent-root` |
-| Claude Code | `.claude/skills/<domain>/SKILL.md` | description match |
-| Copilot | `.github/prompts/agent-root.prompt.md` | you type `/agent-root` |
-| Copilot | `.github/copilot-instructions.md` | every request, repo-wide |
-| Copilot | `.github/instructions/<domain>.instructions.md` | `applyTo:` glob |
+| Claude Code | `.claude/skills/<name>/SKILL.md` | `/name`, or description match |
+| GitHub Copilot | `.claude/skills/<name>/SKILL.md` | `/name`, or description match |
+| GitHub Copilot | `.github/copilot-instructions.md` | every request, repo-wide |
+| GitHub Copilot | `.github/instructions/<name>.instructions.md` | `applyTo:` glob |
 
-### Installing Root as a Copilot command
+### One skill directory, both assistants
 
-Copilot has no "skills", but it has three separate mechanisms, and `install`
-writes all three. Only one of them gives you a command you can invoke by name:
+Copilot reads **`.claude/skills/`** as a project-skill location — alongside
+`.github/skills/` and `.agents/skills/` — in the CLI, in VS Code, and for the
+cloud agent. Skills load automatically when the description matches the task, and
+can be invoked by name with `/agent-root`.
+
+So `install` writes **one** skill directory and both assistants read it. It is the
+intersection, not a Claude-only path, and that is why there is no second copy.
 
 ```
-.github/prompts/agent-root.prompt.md     <- /agent-root in Copilot Chat
-.github/copilot-instructions.md          <- always on, every request
-.github/instructions/*.instructions.md   <- per-domain, on an applyTo glob
+.claude/skills/agent-root/SKILL.md   -> /agent-root in Claude Code AND Copilot
+.claude/skills/<domain>/SKILL.md     -> the generated tripwires, same deal
+.github/copilot-instructions.md      -> Copilot, always on
+.github/instructions/*.md            -> Copilot, fires on an applyTo path glob
 ```
 
-Nothing else to install: they are files in your repo, they travel with a clone,
-and they go through your employer's normal review. In VS Code, prompt files need
-`chat.promptFiles` enabled — on by default in current builds, worth confirming
-once in settings if `/agent-root` does not appear.
+Personal (cross-repo) skills live in `~/.copilot/skills/` or `~/.agents/skills/`;
+VS Code also reads `~/.claude/skills/`.
 
-⚠️ **These three are not interchangeable, and treating them as one is a real
-bug this project shipped.** Writing the always-on file and the glob-scoped ones
-looked complete, and left `/agent-root` working in Claude Code while silently
-absent in Copilot — the assistant more people actually have at work.
+⚠️ **`name:` must be lowercase-with-hyphens or Copilot silently ignores the
+skill** — it is simply never offered, which looks identical to a skill nobody
+wrote. `kernel.py check` validates the frontmatter of every skill for exactly this
+reason, because a rename can un-publish a tripwire without any error.
 
-⭐ **Commit them.** The prompt file is how a *colleague* gets Root without
-installing anything, and how the reviewer on your PR sees the same traps you did.
-
-> ⚠️ **The absolute rule: no knowledge may live ONLY in a tool-specific
-> location.** That is what makes this usable where a *different* assistant is the
-> approved one — the knowledge layer is plain markdown in your employer's repo,
-> under your employer's review, with no shadow AI store.
+⭐ **This section was wrong when first written.** It claimed Copilot had no skills,
+which was never checked — and on that false premise a duplicate
+`.github/prompts/agent-root.prompt.md` was generated, a second copy of the same
+instructions free to drift from the first. Both the claim and the duplicate are
+gone. Asserting what *another* tool cannot do, without reading its documentation,
+is the same failure as asserting what your own code does without running it.
 
 ## Facts that prove themselves
 
