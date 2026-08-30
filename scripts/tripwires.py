@@ -179,6 +179,16 @@ def main() -> int:
               "Merge or evict one - a diluted trigger set fires on nothing.")
         return 1
 
+    # ⚠️ NEVER-GENERATED IS NOT STALE, and conflating them made a fresh install
+    # fail CI on its first push over files it had never been given. `install`
+    # deliberately does not run this - seeding a repo with the EXAMPLE domains
+    # would be exactly the wallpaper this project warns about - so "no outputs
+    # at all" means tripwires are not adopted yet, which is a legitimate state.
+    # The moment ONE output exists, they must all match: a half-generated set is
+    # the fork this file exists to prevent.
+    any_output = any(os.path.exists(p) for d in DOMAINS
+                     for p, _t in (claude_skill(d), copilot_instruction(d)))
+
     stale = []
     for d in DOMAINS:
         for path, text in (claude_skill(d), copilot_instruction(d)):
@@ -188,7 +198,8 @@ def main() -> int:
             if existing == text:
                 continue
             if args.check:
-                stale.append(path)
+                if any_output:
+                    stale.append(path)
                 continue
             os.makedirs(os.path.dirname(path), exist_ok=True)
             io.open(path, "w", encoding="utf-8", newline="\n").write(text)
@@ -222,7 +233,19 @@ def main() -> int:
     if blocks_text is not None:
         existing = (io.open(blocks_path, encoding="utf-8").read()
                     if os.path.exists(blocks_path) else None)
-        if existing != blocks_text:
+        # ⚠️ NO RULES AND NO FILE IS A CONSISTENT STATE, NOT A STALE ONE. The
+        # first version demanded the file unconditionally, so a repo that had
+        # declared zero interlocks - which is every repo on the day it installs
+        # this - failed CI on its first push, before the user had done anything
+        # wrong. A check that fails on a correct state trains people to ignore
+        # it, and the guard is the first thing they then switch off.
+        #
+        # The asymmetry is deliberate: rules DECLARED but not compiled must
+        # still fail loudly, because an interlock nobody compiled is an
+        # interlock nobody is enforcing.
+        if not blocks and existing is None:
+            pass
+        elif existing != blocks_text:
             if args.check:
                 stale.append(blocks_path)
             else:
