@@ -6,7 +6,7 @@
 Both were broken here at least once. A green run on Windows and Linux is worth
 more to a DevOps reader than any paragraph.
 """
-import os, subprocess, sys, tempfile, shutil, io
+import os, subprocess, sys, tempfile, shutil, io, json
 
 NL = chr(10)
 
@@ -141,6 +141,55 @@ def main():
             # and the installed copy must actually run where it landed
             run(py, os.path.join(dst, "scripts", "review.py"), cwd=dst)
 
+            # ⭐ THE GUARD IS TESTED IN BOTH DIRECTIONS, ALWAYS. A guard proven
+            # only to block is half-tested, and the dangerous half is the other
+            # one: an early version "blocked" all eight cases because guard.py
+            # was missing and a Python interpreter that cannot find its script
+            # ALSO exits 2. Blocking everything looked like working.
+            rules = os.path.join(dst, ".claude", "agent-root-blocks.json")
+            io.open(rules, "w", encoding="utf-8").write(json.dumps({"blocks": [
+                {"on": "write", "match": "**/SECRET.md", "file": "t.md",
+                 "line": 1, "why": "test rule"},
+                {"on": "bash", "match": "*rm -rf /*", "file": "t.md",
+                 "line": 2, "why": "test rule"}]}))
+            g = os.path.join(dst, "scripts", "guard.py")
+
+            def verdict(payload):
+                p = subprocess.run([py, g], cwd=dst, input=json.dumps(payload),
+                                   capture_output=True, text=True,
+                                   encoding="utf-8", errors="replace")
+                assert "can't open file" not in (p.stderr or ""), "guard.py missing"
+                return p.returncode
+
+            assert verdict({"tool_name": "Write",
+                            "tool_input": {"file_path": "SECRET.md"}}) == 2
+            assert verdict({"tool_name": "Bash",
+                            "tool_input": {"command": "rm -rf /tmp/x"}}) == 2
+            assert verdict({"tool_name": "Write",
+                            "tool_input": {"file_path": "src/ok.py"}}) == 0
+            assert verdict({"tool_name": "Bash",
+                            "tool_input": {"command": "ls -la"}}) == 0
+            assert verdict({"tool_name": "Read",
+                            "tool_input": {"file_path": "SECRET.md"}}) == 0
+            # fail OPEN: a guard that cannot parse its input must not stop work
+            bad = subprocess.run([py, g], cwd=dst, input="not json{{{",
+                                 capture_output=True, text=True,
+                                 encoding="utf-8", errors="replace")
+            assert bad.returncode == 0, "guard must fail open on bad input"
+
+            # the hook is wired, and wiring twice does not duplicate it
+            st = json.loads(io.open(os.path.join(dst, ".claude", "settings.json"),
+                                    encoding="utf-8").read())
+            n = sum(1 for e in st.get("hooks", {}).get("PreToolUse", [])
+                    if "guard.py" in json.dumps(e))
+            assert n == 1, "expected exactly one guard hook, found %d" % n
+
+            # CI guard shipped
+            assert os.path.exists(os.path.join(dst, ".github", "workflows",
+                                               "agent-root.yml"))
+            # fleet reports the installed repo without blowing up
+            run(py, os.path.join(tmp, "scripts", "kernel.py"), "fleet", dst, cwd=dst)
+
         # WARNING: EVERY SHIPPED hash_cmd MUST SURVIVE .format(). A pure string
         # check, no ssh needed. The Windows example once shipped with mismatched
         # braces and raised KeyError, which the broad except turned into
@@ -198,7 +247,7 @@ def main():
             print("  -", f)
         return 1
     print("smoke OK - init, map, archaeology, traps (both marker forms), "
-          "tripwires (idempotent, no mojibake), verify, drift, review, install")
+          "tripwires (idempotent, no mojibake), verify, drift, review, install, guard (blocks+allows+fails open), CI, fleet, sections")
     return 0
 
 

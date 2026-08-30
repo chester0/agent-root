@@ -42,6 +42,7 @@ also be given as any path prefix, so `docs/runbooks` works.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import subprocess
@@ -247,6 +248,66 @@ def scan(root: str, paths: list[str]) -> list[dict]:
     return hits
 
 
+BLOCK_RE = re.compile(r"<!--\s*block:\s*(write|bash)\s+(\S+)\s*-->")
+BLOCK_KINDS = ("write", "bash")
+
+
+def extract_blocks(root: str, paths: list[str], hits: list[dict]) -> list[dict]:
+    """Traps that asked, EXPLICITLY, to become interlocks rather than prompts.
+
+    ⭐ A trap is advisory by default and always will be. Only a trap carrying an
+    inline `<!-- block: write <glob> -->` or `<!-- block: bash <glob> -->`
+    directive is compiled into something that can stop a tool call. Inferring
+    blocks from the wording of 777 existing traps would produce an agent that
+    refuses work for reasons nobody chose.
+
+    ⚠️ A malformed directive yields NO rule. It must never widen into a rule that
+    matches everything - a guard that blocks the world is indistinguishable from
+    a broken repo, and the first thing anyone does is disable it permanently.
+    """
+    # ⚠️ SCANNED FROM THE RAW LINES, NOT FROM A HIT'S `text` FIELD. The first
+    # version read the summarised text, which is assembled by a prose heuristic
+    # that stops appending continuation lines at a sentence-ending period. A
+    # directive placed under a trap whose sentence happened to end was silently
+    # dropped - so whether a rule became an interlock depended on the PUNCTUATION
+    # of the prose above it. Rules must come from the source, never a summary.
+    by_file: dict[str, list[dict]] = {}
+    for h in hits:
+        by_file.setdefault(h["file"], []).append(h)
+
+    out = []
+    for rel in paths:
+        full = os.path.join(root, rel)
+        try:
+            with open(full, "r", encoding="utf-8", errors="replace") as fh:
+                lines = fh.readlines()
+        except OSError:
+            continue
+        if any(GENERATED_BANNER in l for l in lines[:6]):
+            continue
+        for i, line in enumerate(lines, 1):
+            for kind, pattern in BLOCK_RE.findall(line):
+                if kind not in BLOCK_KINDS or not pattern:
+                    continue
+                # ⚠️ A PLACEHOLDER IS NOT A RULE. The docstring above documents
+                # the syntax using <glob>, and the first run compiled those
+                # examples into two live blocking rules. Documentation about a
+                # syntax must never be parsed as that syntax - the same
+                # self-ingestion that made an --out file re-read its own banner.
+                if pattern.startswith("<") or pattern.endswith(">"):
+                    continue
+                # the nearest marker at or above this line is the justification
+                prior = [h for h in by_file.get(rel, []) if h["line"] <= i]
+                why = ""
+                if prior:
+                    near = max(prior, key=lambda h: h["line"])
+                    if i - near["line"] <= 6:
+                        why = re.sub(r"<!--.*?-->", "", near["text"]).strip()[:240]
+                out.append({"on": kind, "match": pattern,
+                            "file": rel, "line": i, "why": why})
+    return out
+
+
 def render(hits: list[dict], title: str) -> str:
     traps = [h for h in hits if h["kind"] == "trap"]
     whys = [h for h in hits if h["kind"] == "why"]
@@ -284,10 +345,33 @@ def main() -> int:
                          "Pass '-' to read paths from stdin, e.g. "
                          "git diff --name-only | traps.py --for -")
     ap.add_argument("--out", help="write to this file instead of stdout")
+    ap.add_argument("--json", action="store_true",
+                    help="emit the trap store as JSON for other tools")
     args = ap.parse_args()
 
     root = repo_root()
     hits = scan(root, tracked_files(root))
+
+    # ⭐ JSON is a VIEW, generated from the same scan as every other output. It
+    # exists so an MCP server, an editor plugin or a hook can consume the store
+    # without re-implementing the marker rules - which is how two readers of the
+    # same data start disagreeing about it.
+    if args.json:
+        sel = hits
+        if args.domain:
+            sel = [h for h in hits if h["domain"] == args.domain
+                   or h["file"].startswith(args.domain)]
+        if args.file:
+            want = args.file.replace("\\", "/")
+            sel = [h for h in hits if h["file"] == want]
+        json.dump({"repo": os.path.basename(root),
+                   "counts": {"trap": sum(1 for h in sel if h["kind"] == "trap"),
+                              "why": sum(1 for h in sel if h["kind"] == "why")},
+                   "blocks": extract_blocks(root, tracked_files(root), sel),
+                   "hits": sel},
+                  sys.stdout, indent=2, ensure_ascii=False)
+        print()
+        return 0
 
     if args.domains:
         counts: dict[str, list[int]] = {}

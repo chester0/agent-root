@@ -4,7 +4,7 @@
 allows read the traps you already wrote — *before* acting — and tells you when
 the file you are editing is not the one that is running.
 
-Five markdown files you own, six Python-stdlib scripts that maintain them. No
+Five markdown files you own, seven Python-stdlib scripts that maintain them. No
 dependencies, no service, no vector database, no API key.
 
 ---
@@ -219,6 +219,51 @@ which was never checked — and on that false premise a duplicate
 instructions free to drift from the first. Both the claim and the duplicate are
 gone. Asserting what *another* tool cannot do, without reading its documentation,
 is the same failure as asserting what your own code does without running it.
+
+## Traps that stop you, not just warn you
+
+Everything above is advisory, and for most traps that is correct. But a few rules
+are worth enforcing, and a warning cannot enforce anything — this project proved
+that on itself: a trap saying *never hand-sync README.md* was written, and the
+same mistake was made again an hour later, by the author of the trap.
+
+Add a directive to a trap and it compiles into an interlock:
+
+```markdown
+⚠️ **README.md is repo identity, not shared implementation.** Never hand-sync it.
+<!-- block: write **/README.md -->
+
+⚠️ **Never force-push to main.** History others have pulled must not be rewritten.
+<!-- block: bash *push*--force* -->
+```
+
+`tripwires.py` compiles those into `.claude/agent-root-blocks.json`, and a
+PreToolUse hook runs `guard.py` before every Write, Edit and Bash:
+
+```console
+  BLOCKED by Agent Root - a trap in this repo forbids this.
+
+    action : README.md
+    rule   : write **/README.md
+    trap   : HOUSE-RULES.md:3
+
+    ⚠️ README.md is repo identity, not shared implementation. Never hand-sync it.
+
+  This rule is opt-in and editable: .claude/agent-root-blocks.json
+```
+
+⚠️ **A guard that blocks wrongly is worse than no guard**, because the first thing
+anyone does with one that cries wolf is switch it off — and the real rules go with
+it. So: **opt-in only** (nothing is inferred from the wording of existing traps),
+**fail open** (any error allows the action), **always cite** the trap that caused
+the block, and **always escapable** — the rules are a committed JSON file a human
+can edit or delete.
+
+⭐ **`guard.py` is on the install list as a safety requirement, not a
+convenience.** The hook blocks on exit code 2 — and a Python interpreter that
+cannot find its script *also* exits 2. A missing guard does not fail open, it
+blocks everything. Measured: with it absent, all eight test cases "blocked",
+including the two written to prove fail-open.
 
 ## Facts that prove themselves
 

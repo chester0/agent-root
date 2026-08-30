@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import argparse
 import io
+import json
 import os
 import re
 import shutil
@@ -51,6 +52,8 @@ import sys
 from collections import Counter
 
 NL = chr(10)
+FENCE = chr(96) * 3 + NL
+FENCE_END = NL + chr(96) * 3
 DESC_RE = r"^description:[^\S\r\n]*\S"
 
 for _s in (sys.stdout, sys.stderr):
@@ -166,6 +169,28 @@ def cmd_map(root: str, scope_all: bool = False) -> int:
     rows = []
     for f in sorted(files):
         rows.append((f, first_heading(os.path.join(root, f)), dates.get(f, "")))
+
+    # ⭐ A generated table that lives inside a handwritten file. AGENTS.md is
+    # capped and mostly human, but its domain index is derived - so it is the
+    # exact case markers exist for.
+    try:
+        import subprocess as _sp
+        _r = _sp.run([sys.executable, os.path.join(os.path.dirname(
+            os.path.abspath(__file__)), "traps.py"), "--domains"],
+            cwd=root, capture_output=True, text=True, encoding="utf-8",
+            errors="replace")
+        if _r.stdout.strip():
+            _st = write_section(os.path.join(root, "AGENTS.md"), "domains",
+                                FENCE + _r.stdout.strip() + FENCE_END)
+            if _st == "updated":
+                print("  AGENTS.md domain index: refreshed in place")
+            elif _st == "unmarked":
+                print("  AGENTS.md has no domain markers - add these two lines "
+                      "where you want a live index:")
+                print("    " + SECTION_BEGIN % "domains")
+                print("    " + SECTION_END % "domains")
+    except Exception:
+        pass
 
     stamp = git(root, "log", "-1", "--format=%ad", "--date=short").strip()
     out = [
@@ -432,8 +457,173 @@ INSTALL_FILES = [
     "AGENT-ROOT.md", "USING-AGENT-ROOT.md",
     "scripts/traps.py", "scripts/tripwires.py", "scripts/kernel.py",
     "scripts/drift.py", "scripts/verify.py", "scripts/review.py",
+    # ⚠️ guard.py IS A SAFETY REQUIREMENT ON THIS LIST, not a convenience. The
+    # PreToolUse hook blocks on exit code 2 - and a Python interpreter that
+    # cannot find its script ALSO exits 2. So a missing guard.py does not fail
+    # open, it blocks every matching tool call in the repo. It cannot fail open
+    # if it never runs. Measured: with guard.py absent, all eight test cases
+    # "blocked", including the two designed to prove fail-open.
+    "scripts/guard.py",
     "profiles/devops.py",
 ]
+
+
+SECTION_BEGIN = "<!-- agent-root:begin %s -->"
+SECTION_END = "<!-- agent-root:end %s -->"
+
+
+def write_section(path, name, body):
+    """Refresh ONE marked region of a mostly-handwritten file. Three modes.
+
+    ⭐ Borrowed deliberately: a file is either absent, marked, or unmarked, and
+    each deserves a different answer.
+
+        absent    -> nothing. This never creates a document out of nowhere.
+        marked    -> replace ONLY between the markers. Prose outside is untouched.
+        unmarked  -> write <path>.generated.md beside it and say so.
+
+    ⚠️ THE UNMARKED CASE IS WHY THIS EXISTS. The previous behaviour was
+    all-or-nothing: install refused to touch an existing file at all, so a repo
+    that had customised AGENTS.md could never receive an improved generated
+    table again - it was frozen at whatever it had on day one. Refusing wholesale
+    is safe and useless; clobbering is useful and unsafe. Markers are the seam.
+    """
+    if not os.path.exists(path):
+        return "absent"
+    text = io.open(path, encoding="utf-8", errors="replace").read()
+    b, e = SECTION_BEGIN % name, SECTION_END % name
+    if b in text and e in text:
+        head, rest = text.split(b, 1)
+        _, tail = rest.split(e, 1)
+        new = head + b + NL + body.rstrip(NL) + NL + e + tail
+        if new == text:
+            return "nochange"
+        io.open(path, "w", encoding="utf-8", newline="").write(new)
+        return "updated"
+    # ⚠️ NO FILE IS WRITTEN HERE. An earlier version dropped a `.generated.md`
+    # beside every unmarked file, and running `map` in a real repo produced an
+    # unrequested document in the working tree - a tool asked to regenerate ONE
+    # index inventing a second one. The offer is made in the output instead;
+    # markers are opt-in, so the absence of markers is an answer, not a gap.
+    return "unmarked"
+
+
+GUARD_CMD = "python scripts/guard.py"
+
+CI_WORKFLOW = """# Agent Root: fail the build when the knowledge layer goes stale.
+# ⭐ kernel.py check has always existed; nothing enforced it, so a stale contract
+# was only ever caught by someone choosing to run it. A check with no CI behind
+# it is advice.
+name: agent-root
+on: [push, pull_request]
+jobs:
+  kernel:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0          # review.py reads history for co-change priors
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+      - name: kernel intact (caps, skill frontmatter, required files)
+        run: python scripts/kernel.py check
+      - name: tripwires and interlocks match the manifest
+        run: python scripts/tripwires.py --check
+      - name: documented facts still hold
+        run: python scripts/verify.py --quick
+"""
+
+
+def cmd_fleet(paths):
+    """One row per repo: is Root installed, and is its knowledge alive?
+
+    ⚠️ Reports ABSENCE as loudly as trouble. A repo with no Root shows "-", never
+    a blank that reads like a pass; and a repo whose traps are zero is called out
+    rather than being scored well for having nothing to be wrong about.
+    """
+    rows = []
+    for p in paths:
+        p = os.path.abspath(p)
+        if not os.path.isdir(os.path.join(p, ".git")):
+            continue
+        name = os.path.basename(p)
+        has = os.path.exists(os.path.join(p, "scripts", "traps.py"))
+        if not has:
+            rows.append((name, "-", "-", "-", "no"))
+            continue
+        traps = whys = "?"
+        try:
+            r = subprocess.run([sys.executable, os.path.join(p, "scripts", "traps.py"),
+                                "--json"], cwd=p, capture_output=True, text=True,
+                               encoding="utf-8", errors="replace")
+            d = json.loads(r.stdout or "{}")
+            traps = str(d.get("counts", {}).get("trap", "?"))
+            whys = str(len(d.get("blocks", [])))
+        except Exception:
+            pass
+        chk = subprocess.run([sys.executable, os.path.join(p, "scripts", "kernel.py"),
+                              "check"], cwd=p, capture_output=True, text=True,
+                             encoding="utf-8", errors="replace")
+        state = "ok" if "kernel intact" in (chk.stdout or "") else "STALE"
+        wired = "yes" if os.path.exists(
+            os.path.join(p, ".claude", "skills", "agent-root", "SKILL.md")) else "no"
+        rows.append((name, traps, whys, state, wired))
+
+    if not rows:
+        print("  no git repositories found in those paths.")
+        return 1
+    print("  %-22s %7s %7s %7s %6s" % ("repo", "traps", "blocks", "kernel", "wired"))
+    print("  " + "-" * 54)
+    for r in rows:
+        print("  %-22s %7s %7s %7s %6s" % r)
+    missing = [r[0] for r in rows if r[4] == "no"]
+    print()
+    if missing:
+        print("  %d of %d repo(s) have no Agent Root: %s"
+              % (len(missing), len(rows), ", ".join(missing[:6])))
+        print("  install with: python scripts/kernel.py install --target <repo>")
+    return 0
+
+
+def wire_guard(target):
+    """Register the PreToolUse interlock, MERGING into any existing settings.
+
+    ⚠️ This file belongs to the user, not to us. It may already carry hooks,
+    permissions and model settings that matter more than ours, so the whole
+    document is read, one entry is added if absent, and everything else is
+    written back untouched. Clobbering a settings file to install a guard would
+    be a fine way to have the guard removed permanently within the hour.
+
+    ⭐ Committed, not local. `.claude/settings.json` is shared with the team;
+    `settings.local.json` is personal and gitignored. A rule protecting the repo
+    belongs in the shared file, where it cannot be silently switched off.
+    """
+    p = os.path.join(target, ".claude", "settings.json")
+    data = {}
+    if os.path.exists(p):
+        try:
+            data = json.loads(io.open(p, encoding="utf-8").read() or "{}")
+        except Exception:
+            # ⚠️ Unreadable settings are left ALONE. Overwriting a file we could
+            # not parse would destroy configuration we never saw.
+            print("  .claude/settings.json is not valid JSON - guard not wired")
+            print("  fix the file, then run: python scripts/kernel.py install")
+            return False
+
+    hooks = data.setdefault("hooks", {})
+    pre = hooks.setdefault("PreToolUse", [])
+    if any(GUARD_CMD in json.dumps(entry) for entry in pre):
+        return True                                  # already wired, idempotent
+
+    pre.append({
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash",
+        "hooks": [{"type": "command", "command": GUARD_CMD}],
+    })
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    io.open(p, "w", encoding="utf-8", newline=NL).write(
+        json.dumps(data, indent=2, ensure_ascii=False) + NL)
+    return True
 
 
 def cmd_install(root, target):
@@ -494,6 +684,11 @@ def cmd_install(root, target):
     # a second copy of the same instructions, free to drift from the first, which
     # is the duplication this project exists to prevent. Assert nothing about
     # another tool's features without reading its documentation.
+    wire_guard(target)
+    wf = os.path.join(target, ".github", "workflows", "agent-root.yml")
+    os.makedirs(os.path.dirname(wf), exist_ok=True)
+    if not os.path.exists(wf):          # never clobber an existing workflow
+        io.open(wf, "w", encoding="utf-8", newline=NL).write(CI_WORKFLOW)
     print("  wired: .claude/skills/agent-root/SKILL.md")
     print("         -> /agent-root in Claude Code AND GitHub Copilot")
     print("         .github/copilot-instructions.md  (Copilot, always on)")
@@ -563,14 +758,22 @@ def cmd_check(root: str) -> int:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("command",
-                    choices=["install", "init", "map", "archaeology", "check"])
+                    choices=["install", "init", "map", "archaeology", "check",
+                             "fleet"])
+    ap.add_argument("paths", nargs="*",
+                    help="for `fleet`: the repos to survey")
     ap.add_argument("--target",
                     help="install Agent Root into this repo")
     ap.add_argument("--all", action="store_true",
                     help="map every text file, not just docs and entry points")
     args = ap.parse_args()
     root = repo_root()
-    print(f"repo: {root}")
+    # ⚠️ `fleet` is about OTHER repos. Printing this repo's path above a table of
+    # several was actively misleading - it read as a heading for the rows below.
+    if args.command != "fleet":
+        print(f"repo: {root}")
+    if args.command == "fleet":
+        return cmd_fleet(args.paths or [os.getcwd()])
     if args.command == "install":
         # WARNING: the SOURCE is where this script lives, not the cwd. Deriving
         # it from `git rev-parse` made source and target identical whenever the
