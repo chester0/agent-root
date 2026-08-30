@@ -42,18 +42,65 @@ you plug in.
 
 ## Quickstart
 
+One command installs the tools, wires them into your assistant, and runs `init`:
+
 ```bash
-# from a clone of this repo:
-cp -r scripts profiles /path/to/your-repo/
-cd /path/to/your-repo
-python scripts/kernel.py init          # seeds AGENTS.md, DECISIONS.md, MAP.md, CANDIDATES.md
-python scripts/kernel.py archaeology   # mine git for what needs documenting
-python scripts/tripwires.py            # emit Claude skills + Copilot instructions
+python /path/to/agent-root/scripts/kernel.py install --target /path/to/your-repo
 ```
 
-Then spend **one hour**: write the "what this repo is" paragraph yourself, triage
-`CANDIDATES.md`, and leave the operating rules **empty** until an incident earns
-one.
+Then in your editor: **`/agent-root`**.
+
+`init` reads your git history and seeds `AGENTS.md`, `MAP.md`, `CANDIDATES.md`,
+`DECISIONS.md` and `JOURNAL.md`. After that, spend **one hour**: write the "what
+this repo is" paragraph yourself, triage `CANDIDATES.md`, and leave the operating
+rules **empty** until an incident earns one.
+
+⚠️ **`init` gets you the skeleton, not the knowledge.** It sees which files change
+together and which commits smell like reverts; it cannot see why. That hour of
+triage is the entire value — `CANDIDATES.md` is a list of questions, and the
+answers only exist in someone who was there.
+
+⭐ Install **refuses an incomplete source** rather than skipping the missing
+pieces. A half-installed reviewer that still reports "installed" is worse than one
+that fails, because you would go on to trust it.
+
+## Reviewing a change
+
+Root does not judge from the diff alone. `review.py` gathers the receipts first:
+
+```bash
+python scripts/review.py                 # uncommitted working tree
+python scripts/review.py --commit HEAD   # one commit
+python scripts/review.py --range a..b    # a span
+python scripts/review.py --pr 42         # a pull request (needs `gh`)
+```
+
+```console
+CHANGED  (3)
+  src/stream.py
+  deploy/app.conf
+  scripts/healthcheck.sh
+
+DOMAINS TOUCHED / TRAPS ON FILE
+  # resolved 3 path(s) to 2 domain(s): deploy, src
+  41 trap/design lines recorded in those domains
+    - L104: ⚠️ Do not do this with a second producer. That was tried:
+
+DRIFT
+  deploy/app.conf   web   repo 3ac9ad / host 548e59   DRIFTED
+
+PRIORS  (base rates, not findings)
+  coupling: src/stream.py usually changes with tests/test_stream.py (7 of 9) - it did not
+
+LEDGER
+  markers added by this change: 0
+  WARNING: this looks like a fix and records NO trap.
+```
+
+> ⚠️ **It gathers; it never judges, and it never posts.** An evidence-gatherer
+> that also opines is one you cannot check, because you can no longer tell which
+> line came from a command and which from a guess. The verdict is the agent's, and
+> every field above it traces to something that was run.
 
 ## What it actually looks like
 
@@ -136,8 +183,35 @@ manifest:
 
 | Assistant | Mechanism | Fires on |
 |---|---|---|
-| Claude Code | `.claude/skills/<name>/SKILL.md` | description match |
-| GitHub Copilot | `.github/instructions/<name>.instructions.md` | `applyTo:` glob |
+| Claude Code | `.claude/skills/agent-root/SKILL.md` | you type `/agent-root` |
+| Claude Code | `.claude/skills/<domain>/SKILL.md` | description match |
+| Copilot | `.github/prompts/agent-root.prompt.md` | you type `/agent-root` |
+| Copilot | `.github/copilot-instructions.md` | every request, repo-wide |
+| Copilot | `.github/instructions/<domain>.instructions.md` | `applyTo:` glob |
+
+### Installing Root as a Copilot command
+
+Copilot has no "skills", but it has three separate mechanisms, and `install`
+writes all three. Only one of them gives you a command you can invoke by name:
+
+```
+.github/prompts/agent-root.prompt.md     <- /agent-root in Copilot Chat
+.github/copilot-instructions.md          <- always on, every request
+.github/instructions/*.instructions.md   <- per-domain, on an applyTo glob
+```
+
+Nothing else to install: they are files in your repo, they travel with a clone,
+and they go through your employer's normal review. In VS Code, prompt files need
+`chat.promptFiles` enabled — on by default in current builds, worth confirming
+once in settings if `/agent-root` does not appear.
+
+⚠️ **These three are not interchangeable, and treating them as one is a real
+bug this project shipped.** Writing the always-on file and the glob-scoped ones
+looked complete, and left `/agent-root` working in Claude Code while silently
+absent in Copilot — the assistant more people actually have at work.
+
+⭐ **Commit them.** The prompt file is how a *colleague* gets Root without
+installing anything, and how the reviewer on your PR sees the same traps you did.
 
 > ⚠️ **The absolute rule: no knowledge may live ONLY in a tool-specific
 > location.** That is what makes this usable where a *different* assistant is the

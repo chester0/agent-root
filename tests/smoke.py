@@ -125,6 +125,7 @@ def main():
                 "install", "--target", dst, cwd=dst)
             for need in (os.path.join(".claude", "skills", "agent-root", "SKILL.md"),
                          os.path.join(".github", "copilot-instructions.md"),
+                         os.path.join(".github", "prompts", "agent-root.prompt.md"),
                          os.path.join("scripts", "review.py"),
                          "AGENT-ROOT.md", "AGENTS.md"):
                 assert os.path.exists(os.path.join(dst, need)), "install missed " + need

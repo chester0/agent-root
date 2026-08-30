@@ -410,12 +410,56 @@ read the output. This repo records hard-won traps in situ; that command is how
 they reach you, scoped to what you are touching.
 """
 
+# WARNING: README.md IS NOT ON THIS LIST AND MUST NEVER BE. This list is shared
+# IMPLEMENTATION - files that must be byte-identical in every repo. README.md is
+# the opposite: it is repo IDENTITY, and the same filename means a different
+# document in each one. An ad-hoc `for f in ...; do cp` sync that included it
+# overwrote a repo's own 5-line README with this project's 312-line one. When
+# syncing by hand, sync THIS list, not a filename you happen to have edited.
 INSTALL_FILES = [
     "AGENT-ROOT.md", "USING-AGENT-ROOT.md",
     "scripts/traps.py", "scripts/tripwires.py", "scripts/kernel.py",
     "scripts/drift.py", "scripts/verify.py", "scripts/review.py",
     "profiles/devops.py",
 ]
+
+
+PROMPT_FILE = '''---
+mode: agent
+description: Agent Root - review this repo's changes with receipts, never guesses.
+---
+
+# Agent Root
+
+> **Root reviews with receipts. It never repairs, and it never guesses.**
+
+Read `AGENT-ROOT.md` for the full contract and `AGENTS.md` for this repo's facts,
+then follow them for this request.
+
+## Gather the evidence before judging it
+
+Run the gatherer and read its output before saying anything about a change:
+
+```bash
+python scripts/review.py                 # the working tree
+python scripts/review.py --commit HEAD   # a commit
+python scripts/review.py --pr 42         # a pull request
+```
+
+It reports what changed, which domains that touches, the traps already recorded
+there, whether an edited file is also running somewhere else, what history says
+usually changes alongside, and whether the change wrote down what it learned.
+
+## The output contract
+
+Answer in the fixed field shape from `AGENT-ROOT.md` section 6. Every field must
+be filled from command output. An empty field is not a pass - say the field is
+empty and say which command would fill it.
+
+If you could not check something, label the verdict GUESS. That label outranks a
+confident answer, and it is immediately followed by the command that would settle
+it.
+'''
 
 
 def cmd_install(root, target):
@@ -448,15 +492,35 @@ def cmd_install(root, target):
         return 1
     print("  copied %d file(s)" % copied)
 
+    # WARNING: NEVER overwrite an adapter that already exists. Re-running install
+    # on a live repo replaced a hand-tuned SKILL.md - whose description listed
+    # that repo's real domains, which is exactly what makes the skill auto-fire -
+    # with the generic stub. An installer that silently discards local
+    # customisation punishes the people who used it best.
     ad = os.path.join(target, ".claude", "skills", "agent-root", "SKILL.md")
     os.makedirs(os.path.dirname(ad), exist_ok=True)
-    io.open(ad, "w", encoding="utf-8", newline=NL).write(ADAPTER)
+    if os.path.exists(ad):
+        print("  kept existing .claude/skills/agent-root/SKILL.md (not overwritten)")
+    else:
+        io.open(ad, "w", encoding="utf-8", newline=NL).write(ADAPTER)
 
     ci = os.path.join(target, ".github", "copilot-instructions.md")
     os.makedirs(os.path.dirname(ci), exist_ok=True)
     if not os.path.exists(ci):
         io.open(ci, "w", encoding="utf-8", newline=NL).write(COPILOT)
-    print("  wired: .claude/skills/agent-root/ + .github/copilot-instructions.md")
+    # WARNING: Copilot has THREE separate mechanisms and they are not
+    # interchangeable. copilot-instructions.md is always-on and repo-wide;
+    # instructions/*.instructions.md fire on an applyTo glob; prompts/*.prompt.md
+    # is the only one a person can invoke BY NAME as /agent-root. Writing the
+    # first two and calling it done left the slash command working in Claude Code
+    # and silently absent in Copilot - the tool people actually have at work.
+    pf = os.path.join(target, ".github", "prompts", "agent-root.prompt.md")
+    os.makedirs(os.path.dirname(pf), exist_ok=True)
+    if not os.path.exists(pf):                      # same rule as the adapter
+        io.open(pf, "w", encoding="utf-8", newline=NL).write(PROMPT_FILE)
+    print("  wired for Claude Code:  .claude/skills/agent-root/SKILL.md   -> /agent-root")
+    print("  wired for Copilot:      .github/copilot-instructions.md      (always on)")
+    print("                          .github/prompts/agent-root.prompt.md -> /agent-root")
 
     cwd = os.getcwd()
     try:

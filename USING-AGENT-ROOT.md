@@ -101,10 +101,24 @@ python scripts/verify.py --quick                        # do the docs still hold
 
 ## At work, without Claude
 
-The protocol lives in `AGENT-ROOT.md` as plain markdown. Copilot reads
-`AGENTS.md` and `.github/instructions/` natively, and the same commands run
-anywhere. Point any assistant at `AGENT-ROOT.md` and ask it to follow the output
-contract.
+`install` wires Copilot at the same time as Claude Code, and `/agent-root` works
+in both. Copilot gets three files, which are not interchangeable:
+
+| File | When it fires |
+|---|---|
+| `.github/prompts/agent-root.prompt.md` | you type **`/agent-root`** in Copilot Chat |
+| `.github/copilot-instructions.md` | every request, repo-wide |
+| `.github/instructions/<domain>.instructions.md` | when you open a matching path |
+
+Nothing is installed into the editor — they are files in the repo, they travel
+with a clone, and they pass through normal code review. If `/agent-root` does not
+appear in VS Code, check `chat.promptFiles` in settings.
+
+⭐ **This is the reason none of the knowledge lives in a Claude-only file.** The
+protocol is plain markdown in `AGENT-ROOT.md`; a tool-specific file is only ever a
+thin adapter pointing at it. That is what lets Root work in a repo where the
+approved assistant is a different one — and it means no shadow AI store outside
+your employer's review.
 
 ---
 
