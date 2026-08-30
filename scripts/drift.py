@@ -86,11 +86,15 @@ HOSTS = {
               "note": "this machine"},
 }
 
-DEPLOYMENTS = [
-    # repo path                     host     where it actually runs
-    ("deploy/app.conf",             "web",   "/etc/app/app.conf"),
-    ("scripts/healthcheck.sh",      "web",   "/opt/app/healthcheck.sh"),
-]
+# WARNING: EMPTY ON PURPOSE, and it must stay empty here.
+# This list once shipped with two example rows. On a fresh install they ran as
+# if they were real: a repo that had never declared a deployment got back
+# "scripts/healthcheck.sh  web  no local file" - a phantom finding, generated
+# entirely by sample data, in the section a reviewer trusts most.
+# An unconfigured tool must report an ABSENCE, never a row that reads as a
+# finding. Declare real deployments in scripts/kernel_config.py; the shape is:
+#     DEPLOYMENTS = [("repo/path", "host", "/where/it/actually/runs")]
+DEPLOYMENTS = []
 
 # ---------------------------------------------------------------------------
 # ⭐ ONE IMPLEMENTATION, MANY REPOS. If `scripts/kernel_config.py` exists beside
@@ -232,8 +236,17 @@ def main() -> int:
     if other > 0:
         print(f"    {other} unreachable or unhashable - not evidence of anything;")
         print("    a host that is off looks identical to one that is broken.")
+    if not DEPLOYMENTS:
+        # WARNING: an empty set satisfies a universal claim, so "everything
+        # matches" was printed by a repo that had declared NOTHING - a green
+        # check produced by having done no work. Nothing checked is a distinct
+        # answer from nothing wrong, and it must never wear the tick.
+        print("—  no deployments declared, so nothing was checked.")
+        print("    This is not a pass. Declare them in scripts/kernel_config.py:")
+        print('        DEPLOYMENTS = [("repo/path", "host", "/where/it/runs")]')
+        return 0
     if not drifted and not unreachable:
-        print("✓  every declared deployment matches the repo.")
+        print("✓  all %d declared deployment(s) match the repo." % len(DEPLOYMENTS))
     return 0
 
 

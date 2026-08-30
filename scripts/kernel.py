@@ -45,9 +45,12 @@ import argparse
 import io
 import os
 import re
+import shutil
 import subprocess
 import sys
 from collections import Counter
+
+NL = chr(10)
 
 for _s in (sys.stdout, sys.stderr):
     try:
@@ -64,7 +67,9 @@ try:
     from traps import EXTS as TEXT_EXT, SKIP_DIRS as SKIP
 except Exception:      # traps.py not alongside - keep working, narrower
     TEXT_EXT = {".md", ".py", ".sh", ".yaml", ".yml", ".tf", ".js", ".ts", ".php"}
-    SKIP = {".git", "node_modules", ".venv", "build", "__pycache__", "dist", "archive"}
+    NL = chr(10)
+
+SKIP = {".git", "node_modules", ".venv", "build", "__pycache__", "dist", "archive"}
 
 
 def git(root: str, *args: str) -> str:
@@ -372,6 +377,98 @@ def cmd_init(root: str) -> int:
     return 0
 
 
+# --------------------------------------------------------------------------- install
+ADAPTER = '''---
+name: agent-root
+description: AGENT ROOT - the resident reviewer for this repository. Use when reviewing changes, reviewing a commit or a pull request, orienting in the repo, asking why something is built the way it is, or checking what has drifted or gone stale.
+---
+
+# Agent Root
+
+> **Root reviews with receipts. It never repairs, and it never guesses.**
+
+This file is an adapter. The contract is `AGENT-ROOT.md` - portable markdown that
+any assistant can follow. Read it first, then `AGENTS.md` for this repo's facts.
+
+## Gather the evidence, then judge it
+
+```bash
+python scripts/review.py                 # the working tree
+python scripts/review.py --commit HEAD   # a commit
+python scripts/review.py --pr 42         # a pull request (needs gh)
+```
+
+That command fills the receipt fields. Your job is the verdict, not the
+gathering - and a verdict without a receipt is not a verdict.
+'''
+
+COPILOT = """Read `AGENTS.md` in the repository root before answering or editing,
+and `AGENT-ROOT.md` for the review contract.
+
+Before substantive work, run `python scripts/traps.py --for <changed files>` and
+read the output. This repo records hard-won traps in situ; that command is how
+they reach you, scoped to what you are touching.
+"""
+
+INSTALL_FILES = [
+    "AGENT-ROOT.md", "USING-AGENT-ROOT.md",
+    "scripts/traps.py", "scripts/tripwires.py", "scripts/kernel.py",
+    "scripts/drift.py", "scripts/verify.py", "scripts/review.py",
+    "profiles/devops.py",
+]
+
+
+def cmd_install(root, target):
+    """Drop Agent Root into a repository and bring it up. One command.
+
+    WARNING: copies NAMED files, never a directory walk. A folder copy is how
+    session-state junk - including an agent replay log - nearly shipped in this
+    project's own release.
+    """
+    # WARNING: a partial install must not report success. This loop used to
+    # print "missing from source, skipped" and then finish with "Agent Root is
+    # installed" and exit 0 - so a copy with no contract file, the one document
+    # the whole agent reads, looked exactly like a good one. Absent input is an
+    # error here, never a shrug.
+    copied, missing = 0, []
+    for rel in INSTALL_FILES:
+        s = os.path.join(root, rel)
+        if not os.path.exists(s):
+            missing.append(rel)
+            continue
+        d = os.path.join(target, rel)
+        os.makedirs(os.path.dirname(d), exist_ok=True)
+        shutil.copy2(s, d)
+        copied += 1
+    if missing:
+        print("  INSTALL FAILED - not present in the source kernel:")
+        for m in missing:
+            print("    " + m)
+        print("  Nothing was wired up. Install from a complete checkout.")
+        return 1
+    print("  copied %d file(s)" % copied)
+
+    ad = os.path.join(target, ".claude", "skills", "agent-root", "SKILL.md")
+    os.makedirs(os.path.dirname(ad), exist_ok=True)
+    io.open(ad, "w", encoding="utf-8", newline=NL).write(ADAPTER)
+
+    ci = os.path.join(target, ".github", "copilot-instructions.md")
+    os.makedirs(os.path.dirname(ci), exist_ok=True)
+    if not os.path.exists(ci):
+        io.open(ci, "w", encoding="utf-8", newline=NL).write(COPILOT)
+    print("  wired: .claude/skills/agent-root/ + .github/copilot-instructions.md")
+
+    cwd = os.getcwd()
+    try:
+        os.chdir(target)
+        cmd_init(target)
+    finally:
+        os.chdir(cwd)
+    print("")
+    print("  Agent Root is installed. Now:  /agent-root")
+    return 0
+
+
 def cmd_check(root: str) -> int:
     problems = []
     for fn in ("AGENTS.md", "MAP.md", "JOURNAL.md"):
@@ -396,12 +493,27 @@ def cmd_check(root: str) -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("command", choices=["init", "map", "archaeology", "check"])
+    ap.add_argument("command",
+                    choices=["install", "init", "map", "archaeology", "check"])
+    ap.add_argument("--target",
+                    help="install Agent Root into this repo")
     ap.add_argument("--all", action="store_true",
                     help="map every text file, not just docs and entry points")
     args = ap.parse_args()
     root = repo_root()
     print(f"repo: {root}")
+    if args.command == "install":
+        # WARNING: the SOURCE is where this script lives, not the cwd. Deriving
+        # it from `git rev-parse` made source and target identical whenever the
+        # command was run from inside the repo being installed into - which is
+        # the only way anyone would ever run it - so install refused every real
+        # invocation and worked only in the one case nobody wants.
+        src = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        tgt = os.path.abspath(args.target or os.getcwd())
+        if src == tgt:
+            print("  target is the kernel itself - pass --target <other repo>")
+            return 1
+        return cmd_install(src, tgt)
     if args.command == "map":
         return cmd_map(root, args.all)
     return {"init": cmd_init, "archaeology": cmd_archaeology,

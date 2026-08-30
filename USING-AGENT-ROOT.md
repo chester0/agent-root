@@ -6,6 +6,26 @@
 
 # DOING
 
+## Install it into a repo
+
+```bash
+git clone <the agent-root repo>          # once, anywhere on the machine
+python /path/to/agent-root/scripts/kernel.py install --target /path/to/your/repo
+```
+
+That copies the tools, writes the Claude skill and the Copilot instructions, and
+runs `init` — which reads your git history and lays down `AGENTS.md`, `MAP.md`,
+`CANDIDATES.md` and `JOURNAL.md`. One command, and the repo is wired.
+
+⚠️ **`init` gets you the skeleton, not the knowledge.** It can see which files
+change together and which commits smell like reverts; it cannot see why. The hour
+of triage it asks for at the end is the entire value — `CANDIDATES.md` is a list
+of questions, and answers only come from someone who was there.
+
+⭐ Install refuses to run from an incomplete checkout rather than skipping the
+missing pieces. A half-installed reviewer that still says "installed" is worse
+than one that fails, because you would go on to trust it.
+
 ## Call it
 
 ```

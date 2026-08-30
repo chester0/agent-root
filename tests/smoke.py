@@ -8,8 +8,11 @@ more to a DevOps reader than any paragraph.
 """
 import os, subprocess, sys, tempfile, shutil, io
 
+NL = chr(10)
+
 HERE = os.path.dirname(os.path.abspath(__file__))
-SCRIPTS = os.path.join(os.path.dirname(HERE), "scripts")
+ROOT = os.path.dirname(HERE)
+SCRIPTS = os.path.join(ROOT, "scripts")
 FAIL = []
 
 
@@ -27,6 +30,13 @@ def main():
         run("git", "-C", tmp, "config", "user.email", "t@t.t")
         run("git", "-C", tmp, "config", "user.name", "t")
         shutil.copytree(SCRIPTS, os.path.join(tmp, "scripts"))
+        # a COMPLETE source - install refuses a partial kernel, by design
+        for extra in ("AGENT-ROOT.md", "USING-AGENT-ROOT.md"):
+            src_extra = os.path.join(ROOT, extra)
+            if os.path.exists(src_extra):
+                shutil.copy2(src_extra, os.path.join(tmp, extra))
+        shutil.copytree(os.path.join(ROOT, "profiles"),
+                        os.path.join(tmp, "profiles"))
 
         # A fixture carrying BOTH marker forms, and non-ASCII prose, because the
         # encoding path is what broke twice.
@@ -96,6 +106,30 @@ def main():
         # verification.
         run(py, "scripts/verify.py", "--quick", cwd=tmp, expect=0)
         run(py, "scripts/drift.py", "--list", cwd=tmp)
+        run(py, "scripts/review.py", cwd=tmp)          # working tree
+        run(py, "scripts/review.py", "--commit", "HEAD", cwd=tmp)
+
+        # install into a SECOND repo. This is the headline path - one command
+        # then /agent-root - and it shipped broken twice: once because the
+        # source was derived from the cwd (so it refused every real
+        # invocation), once on an undefined name that only the write path
+        # touched. Both would have been caught here.
+        with tempfile.TemporaryDirectory() as dst:
+            run("git", "init", "-q", ".", cwd=dst)
+            io.open(os.path.join(dst, "README.md"), "w",
+                    encoding="utf-8").write("# t" + NL)
+            run("git", "add", "-A", cwd=dst)
+            run("git", "-c", "user.email=t@t", "-c", "user.name=t",
+                "commit", "-qm", "init", cwd=dst)
+            run(py, os.path.join(tmp, "scripts", "kernel.py"),
+                "install", "--target", dst, cwd=dst)
+            for need in (os.path.join(".claude", "skills", "agent-root", "SKILL.md"),
+                         os.path.join(".github", "copilot-instructions.md"),
+                         os.path.join("scripts", "review.py"),
+                         "AGENT-ROOT.md", "AGENTS.md"):
+                assert os.path.exists(os.path.join(dst, need)), "install missed " + need
+            # and the installed copy must actually run where it landed
+            run(py, os.path.join(dst, "scripts", "review.py"), cwd=dst)
 
         # WARNING: EVERY SHIPPED hash_cmd MUST SURVIVE .format(). A pure string
         # check, no ssh needed. The Windows example once shipped with mismatched
@@ -154,7 +188,7 @@ def main():
             print("  -", f)
         return 1
     print("smoke OK - init, map, archaeology, traps (both marker forms), "
-          "tripwires (idempotent, no mojibake), verify, drift")
+          "tripwires (idempotent, no mojibake), verify, drift, review, install")
     return 0
 
 

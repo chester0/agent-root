@@ -55,11 +55,18 @@ import sys
 #
 # So both forms are recognised, and the ASCII aliases are first-class:
 #
-#     ⚠️  or  WARN:      a trap - something that bit, and will bite again
+#     ⚠️  or  WARN:  or  WARNING:      a trap - it bit, and will bite again
 #     ⭐  or  WHY:       the load-bearing insight
 #
 # Override with TRAPS_WARN / TRAPS_STAR in the environment to match a house style.
-WARN_MARKS = tuple(filter(None, (os.environ.get("TRAPS_WARN"), "⚠", "WARN:")))
+# ⚠️ "WARNING:" IS LISTED SEPARATELY, AND MUST STAY THAT WAY. These are
+# substring tests, so "WARN:" does not match "WARNING:" - the colon is in the
+# wrong place. This repo's own tree drifted to 15 unrecognised "WARNING:" against
+# 11 indexed "WARN:", and nothing complained: an unknown marker is not an error,
+# it is a line that never appears. A retrieval tool silently dropping half its
+# input is the worst failure available to it, so accept the word people type.
+WARN_MARKS = tuple(filter(None, (os.environ.get("TRAPS_WARN"),
+                                 "⚠", "WARNING:", "WARN:")))
 STAR_MARKS = tuple(filter(None, (os.environ.get("TRAPS_STAR"), "⭐", "WHY:")))
 
 # Text files worth scanning. Binaries and generated output are pointless here and
