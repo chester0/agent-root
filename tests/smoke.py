@@ -109,6 +109,16 @@ def main():
         run(py, "scripts/review.py", cwd=tmp)          # working tree
         run(py, "scripts/review.py", "--commit", "HEAD", cwd=tmp)
 
+        # ⭐ The README states a script count in its first paragraph. It said
+        # five while there were six for a whole release, because a number in
+        # prose has nothing checking it. Now it does.
+        n = len([f for f in os.listdir(os.path.join(ROOT, "scripts"))
+                 if f.endswith(".py")])
+        words = {5: "five", 6: "six", 7: "seven", 8: "eight"}
+        readme = io.open(os.path.join(ROOT, "README.md"), encoding="utf-8").read()
+        assert ("%s Python-stdlib scripts" % words.get(n, n)) in readme, (
+            "README script count is stale: there are %d scripts" % n)
+
         # install into a SECOND repo. This is the headline path - one command
         # then /agent-root - and it shipped broken twice: once because the
         # source was derived from the cwd (so it refused every real

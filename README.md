@@ -4,7 +4,7 @@
 allows read the traps you already wrote — *before* acting — and tells you when
 the file you are editing is not the one that is running.
 
-Five markdown files you own, five Python-stdlib scripts that maintain them. No
+Five markdown files you own, six Python-stdlib scripts that maintain them. No
 dependencies, no service, no vector database, no API key.
 
 ---
