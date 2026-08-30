@@ -2,7 +2,16 @@
 # working directory, so a `cp -r` or a folder-based publish carries them along.
 # One of them is a session replay log.
 .omc/
-.claude/
+# WARNING: .claude/* not .claude/ - and the negation below only works that way.
+# Git never descends into an excluded DIRECTORY, so "!.claude/skills/" placed
+# after a bare ".claude/" is silently dead. Excluding the CONTENTS leaves the
+# directory walkable so the re-include can take effect.
+#
+# This matters because .claude/skills/ is read by Claude Code AND by Copilot, so
+# it is a file the README tells people to COMMIT. Ignoring it wholesale meant
+# this project's own repo excluded the one artefact it ships.
+.claude/*
+!.claude/skills/
 .venv/
 __pycache__/
 *.pyc
