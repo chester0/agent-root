@@ -22,9 +22,15 @@ Install copies the tools, writes the skill, and runs `init` — which reads your
 history and seeds `AGENTS.md`, `MAP.md`, `CANDIDATES.md`, `DECISIONS.md` and
 `JOURNAL.md`.
 
-⚠️ **`init` gives you the skeleton, not the knowledge.** It sees which files change
-together and which commits smell like reverts; it cannot see *why*. Budget an hour
-to triage `CANDIDATES.md` — that hour is the whole value.
+⚠️ **`init` gives you the skeleton, not the knowledge.** It mines git for what
+changed together and which commits smell like reverts, and writes those as
+questions in `CANDIDATES.md`. It never writes an answer.
+
+⭐ **Then invoke `/agent-root` and ask it to triage that queue.** It opens the
+commits and the code, answers what the record can settle **with a citation each**,
+and hands back only the questions that need someone who was there. That is not
+auto-summary — it is the retrieval this tool exists for. What it cannot cite, it
+marks `_UNWRITTEN_` and leaves for you.
 
 ## Upgrade
 
@@ -148,8 +154,10 @@ guarantee.
 
 - ⭐ **Generated, never handwritten.** A hand-curated index forks from its source;
   the stale copy is trusted because it looks maintained.
-- ⚠️ **`init` writes no prose.** A confident wrong summary is worse than a blank —
-  it is trusted, never re-examined, and displaces the real answer.
+- ⚠️ **Cite it or leave it blank — there is no third option.** `init` writes no
+  prose at all, and the agent writes only what it can point at: a commit, a file,
+  a line. Plausible prose with no citation is worse than a blank, because it is
+  trusted, never re-examined, and permanently displaces the real answer.
 - ⚠️ **`AGENTS.md` starts with no rules.** A repo earns them one incident at a
   time; rules copied in because they sound wise are wallpaper by week two.
 - ⚠️ **Nothing repairs.** A reviewer that fixes things is one you stop believing

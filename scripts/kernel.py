@@ -400,11 +400,25 @@ def cmd_init(root: str) -> int:
     cmd_map(root)
     cmd_archaeology(root)
     print()
-    print("  Next, and it is about an hour of human work:")
-    print("   1. Write the 'What this repo is' paragraph in AGENTS.md. Yourself.")
-    print("   2. Triage CANDIDATES.md — reverts and 'because' commits first.")
-    print("   3. Leave the operating rules EMPTY until an incident earns one.")
-    print("   4. Run: python scripts/tripwires.py   (emits Claude + Copilot tripwires)")
+    # ⭐ THIS USED TO SAY "about an hour of human work", AND THAT WAS WRONG.
+    # It was written when the only alternative to a human was auto-summary -
+    # plausible prose nobody can check. But an agent with repo access is a third
+    # option: it can open the revert, read the diff, and answer from evidence
+    # WITH A CITATION. That is not summarising, it is the retrieval this whole
+    # project argues for - "guessing is what agents without access do".
+    #
+    # ⚠️ The split is what is PROVABLE from the record versus what only a person
+    # knows. An agent that cites a commit is doing its job; an agent that writes
+    # "this module handles authentication" is doing the damage.
+    print("  Next:")
+    print("   1. Run /agent-root and ask it to triage CANDIDATES.md.")
+    print("      It answers what it can PROVE from git and the code, citing each")
+    print("      one, and hands back only the questions that need a human.")
+    print("   2. Answer those. They are the ones nobody else can.")
+    print("   3. Write the 'What this repo is' paragraph in AGENTS.md yourself -")
+    print("      it is the one thing no evidence contains.")
+    print("   4. Leave the operating rules EMPTY until an incident earns one.")
+    print("   5. Run: python scripts/tripwires.py   (Claude + Copilot tripwires)")
     print("      then: python scripts/traps.py --domains")
     return 0
 
@@ -447,6 +461,31 @@ A verdict must never claim what a step that did not run would have shown.
 
 Your job is the verdict, not the gathering - and a verdict without a receipt is
 not a verdict.
+
+## Triaging CANDIDATES.md
+
+After `init`, `CANDIDATES.md` is a queue of questions mined from git. Work it.
+
+    python scripts/kernel.py decisions    # drafts stubs for reason-commits first
+
+For each candidate, OPEN THE EVIDENCE - `git show`, the diff, the file around it -
+and then do exactly one of two things:
+
+1. **ANSWER IT, WITH THE CITATION.** If the record settles it, write the entry in
+   `DECISIONS.md` and name the commit or the file and line that proves it. You
+   have repo access; using it is the entire point.
+2. **MARK IT `_UNWRITTEN_` AND MOVE ON.** If the answer lives only in someone's
+   memory - why this was chosen over the alternative nobody committed, what they
+   were worried about - say so and leave it for them.
+
+⚠️ **Never write the third thing.** Plausible prose with no citation - "this
+module handles authentication" - is worse than a blank: it is trusted, never
+re-examined, and it permanently displaces the real answer. If you cannot cite it,
+you do not know it.
+
+⭐ Report how many you answered and how many need a human. That ratio is the
+handover, and it is the difference between an hour of someone's evening and ten
+minutes on the questions only they can close.
 <!-- agent-root:end protocol -->
 
 ## This repo's own notes
