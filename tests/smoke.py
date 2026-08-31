@@ -74,6 +74,22 @@ def main():
         run(py, "scripts/kernel.py", "archaeology", cwd=tmp)
         run(py, "scripts/kernel.py", "check", cwd=tmp)
 
+        # ⭐ DECISIONS.md is empty after init BY DESIGN, but the queue that
+        # feeds it existed and nothing carried it across. `decisions` drafts
+        # evidenced stubs and must be idempotent - re-running after every
+        # archaeology pass is the intended workflow.
+        run("git", "-C", tmp, "commit", "--allow-empty", "-qm",
+            "fix: retry the socket because the peer half-closes")
+        d1 = run(py, "scripts/kernel.py", "decisions", cwd=tmp)
+        assert "new" in d1.stdout, "decisions printed no accounting"
+        dec = io.open(os.path.join(tmp, "DECISIONS.md"), encoding="utf-8").read()
+        assert "UNWRITTEN" in dec, "a stub must leave the why VISIBLY blank"
+        assert "because the peer half-closes" in dec, "the reason-commit was missed"
+        n1 = dec.count("agent-root:from")
+        run(py, "scripts/kernel.py", "decisions", cwd=tmp)
+        dec2 = io.open(os.path.join(tmp, "DECISIONS.md"), encoding="utf-8").read()
+        assert dec2.count("agent-root:from") == n1, "decisions is not idempotent"
+
         # BOTH marker forms must be found - the ASCII alias is the whole point of
         # supporting shops that lint emoji out of source.
         out = run(py, "scripts/traps.py", "--domains", cwd=tmp).stdout
@@ -311,7 +327,7 @@ def main():
         for f in FAIL:
             print("  -", f)
         return 1
-    print("smoke OK - init, map, archaeology, traps (both marker forms), "
+    print("smoke OK - init, map, archaeology, decisions (idempotent stubs), traps (both marker forms), "
           "tripwires (idempotent, no mojibake), verify, drift, review, root (one-command), install, upgrade (delivers + preserves), guard (blocks+allows+fails open), CI, fleet, sections")
     return 0
 

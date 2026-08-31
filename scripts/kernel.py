@@ -708,6 +708,98 @@ def write_stamp(repo, source):
         json.dumps(d, indent=2) + NL)
 
 
+DECISION_MARK = "<!-- agent-root:from %s -->"
+
+
+def cmd_decisions(root):
+    """Draft evidenced STUBS into DECISIONS.md. Never writes a reason.
+
+    ⚠️ THE REPORTED PROBLEM: DECISIONS.md is empty after init. That is by design
+    - inventing rationale is the failure this project exists to prevent - but
+    "by design" was doing a lot of work. `archaeology` already finds the reverts
+    and the commits whose messages say *because*, calls them "DECISIONS.md
+    entries written in the wrong place", and then leaves the human to retype
+    them. The queue existed and nothing carried it across.
+
+    ⭐ The seam is what git states VERBATIM versus what only a person knows. The
+    date, the subject and the files are facts and get filled in. Context, why
+    not the alternative, and consequence stay BLANK and visibly so - a stub that
+    guessed at those would be exactly the confident wrong summary that displaces
+    the real answer forever.
+
+    Idempotent: each stub carries its commit sha, and a sha already present is
+    skipped, so this can be re-run after every archaeology pass.
+    """
+    if not is_git(root):
+        print("  not a git repository - decisions are mined from history.")
+        return 1
+
+    path = os.path.join(root, "DECISIONS.md")
+    if not os.path.exists(path):
+        print("  no DECISIONS.md - run `kernel.py init` first.")
+        return 1
+    existing = io.open(path, encoding="utf-8", errors="replace").read()
+
+    # ⚠️ Same two seams archaeology reports, and deliberately no others. A
+    # broader net would drag in ordinary commits and bury the real entries.
+    pat = re.compile(r"(?i)\b(because|instead of|workaround|turns out|revert)\b")
+    log = git(root, "log", "--format=@@C@@%H%x1f%ad%x1f%s", "--date=short",
+              "--name-only", "-n", "500")
+
+    found, cur = [], None
+    for line in log.splitlines():
+        if line.startswith("@@C@@"):
+            if cur:
+                found.append(cur)
+            sha, date, subj = (line[5:].split("\x1f") + ["", ""])[:3]
+            cur = {"sha": sha, "date": date, "subj": subj, "files": []}
+        elif line.strip() and cur:
+            cur["files"].append(line.strip())
+    if cur:
+        found.append(cur)
+
+    hits = [c for c in found if pat.search(c["subj"])]
+    fresh = [c for c in hits if (DECISION_MARK % c["sha"][:7]) not in existing]
+
+    print("  %d commit(s) state a reason; %d already drafted; %d new"
+          % (len(hits), len(hits) - len(fresh), len(fresh)))
+    if not fresh:
+        print("  nothing to add.")
+        return 0
+
+    out = [""]
+    for c in fresh:
+        files = ", ".join(c["files"][:4]) or "(no files recorded)"
+        if len(c["files"]) > 4:
+            files += " and %d more" % (len(c["files"]) - 4)
+        out += [
+            "## %s — %s   %s" % (c["date"], c["subj"][:88],
+                                 DECISION_MARK % c["sha"][:7]),
+            "",
+            "**Context.** _UNWRITTEN — only you know what was true at the time._",
+            "",
+            "**Decision.** %s" % c["subj"],
+            "",
+            "**Why not the alternative.** _UNWRITTEN — this is the field that is "
+            "never recorded and always the one someone needs._",
+            "",
+            "**Consequence.** _UNWRITTEN._",
+            "",
+            "*Evidence: commit `%s`, touched %s*" % (c["sha"][:7], files),
+            "",
+        ]
+
+    with io.open(path, "a", encoding="utf-8", newline=NL) as fh:
+        fh.write(NL.join(out))
+
+    print("  appended %d stub(s) to DECISIONS.md" % len(fresh))
+    print("")
+    print("  ⚠️ These are STUBS, not decisions. Every _UNWRITTEN_ field is a")
+    print("  question only you can answer, and a stub left unfilled is worth")
+    print("  less than no entry - it looks documented and is not.")
+    return 0
+
+
 def cmd_upgrade(repo):
     """Refresh an installed kernel in place. No arguments, no paths to remember.
 
@@ -923,7 +1015,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("command",
                     choices=["install", "upgrade", "init", "map",
-                             "archaeology", "check", "fleet"])
+                             "archaeology", "decisions", "check", "fleet"])
     ap.add_argument("paths", nargs="*",
                     help="for `fleet`: the repos to survey")
     ap.add_argument("--target",
@@ -936,6 +1028,8 @@ def main() -> int:
     # several was actively misleading - it read as a heading for the rows below.
     if args.command != "fleet":
         print(f"repo: {root}")
+    if args.command == "decisions":
+        return cmd_decisions(root)
     if args.command == "upgrade":
         return cmd_upgrade(os.path.abspath(args.target or root))
     if args.command == "fleet":

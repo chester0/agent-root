@@ -64,6 +64,41 @@ answers only exist in someone who was there.
 pieces. A half-installed reviewer that still reports "installed" is worse than one
 that fails, because you would go on to trust it.
 
+## DECISIONS.md is empty after init — on purpose, but not the end of it
+
+`init` writes the contract and no content. Inventing rationale is the failure
+this project exists to prevent, so nothing fabricates a *why*.
+
+But "by design" was doing too much work. `archaeology` already finds the reverts
+and the commits whose messages say *because*, calls them **"DECISIONS.md entries
+written in the wrong place"** — and then left you to retype them.
+
+```bash
+python scripts/kernel.py decisions
+```
+
+drafts an evidenced **stub** per such commit:
+
+```markdown
+## 2026-08-22 — kitchen: hold the sound ON, because the component keeps re-muting it
+
+**Context.** _UNWRITTEN — only you know what was true at the time._
+**Decision.** kitchen: hold the sound ON, because the component keeps re-muting it
+**Why not the alternative.** _UNWRITTEN — the field that is never recorded and
+always the one someone needs._
+**Consequence.** _UNWRITTEN._
+
+*Evidence: commit `a3f21c8`, touched kitchen/index.html, kitchen/server.ps1*
+```
+
+⭐ **The seam is what git states verbatim versus what only a person knows.** The
+date, the subject and the files are facts and get filled in. The three fields
+that require a human stay blank *and visibly labelled so*. Idempotent — each stub
+carries its commit sha — so run it after every archaeology pass.
+
+⚠️ **A stub left unfilled is worth less than no entry**, because it looks
+documented and is not. The command says so every time it runs.
+
 ## Does it touch my network?
 
 **Out of the box, no.** A fresh install declares zero deployments, so `drift.py`
