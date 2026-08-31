@@ -52,6 +52,12 @@ import sys
 from collections import Counter
 
 NL = chr(10)
+
+# ⭐ Bumped whenever the INSTALLED SURFACE changes - the scripts, the adapter or
+# the wiring. It lets an installed repo answer "am I behind?" without diffing
+# eleven files, and it is what `fleet` reports per repo.
+VERSION = "1.1.0"
+
 FENCE = chr(96) * 3 + NL
 FENCE_END = NL + chr(96) * 3
 DESC_RE = r"^description:[^\S\r\n]*\S"
@@ -409,6 +415,7 @@ name: agent-root
 description: AGENT ROOT - the resident reviewer for this repository. Use when reviewing changes, reviewing a commit or a pull request, orienting in the repo, asking why something is built the way it is, or checking what has drifted or gone stale.
 ---
 
+<!-- agent-root:begin protocol -->
 # Agent Root
 
 > **Root reviews with receipts. It never repairs, and it never guesses.**
@@ -440,6 +447,14 @@ A verdict must never claim what a step that did not run would have shown.
 
 Your job is the verdict, not the gathering - and a verdict without a receipt is
 not a verdict.
+<!-- agent-root:end protocol -->
+
+## This repo's own notes
+
+⭐ Everything ABOVE the marker is generated and refreshes on
+`python scripts/kernel.py upgrade`. Everything BELOW is yours and is never
+touched. Put this repo's domains, its never-OK list, and anything an upgrade
+must not overwrite down here.
 '''
 
 COPILOT = """Read `AGENTS.md` in the repository root before answering or editing,
@@ -668,6 +683,112 @@ def wire_guard(target):
     return True
 
 
+STAMP_REL = os.path.join(".claude", "agent-root.json")
+
+
+def read_stamp(repo):
+    try:
+        return json.loads(io.open(os.path.join(repo, STAMP_REL),
+                                  encoding="utf-8").read() or "{}")
+    except Exception:
+        return {}
+
+
+def write_stamp(repo, source):
+    """Record the version and WHERE IT CAME FROM, so upgrade needs no arguments.
+
+    ⭐ The source path is the whole point. Without it, upgrading means
+    remembering where you cloned the kernel months ago - and a maintenance step
+    that depends on recall is a maintenance step that does not happen.
+    """
+    d = {"version": VERSION, "source": os.path.abspath(source)}
+    p = os.path.join(repo, STAMP_REL)
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    io.open(p, "w", encoding="utf-8", newline=NL).write(
+        json.dumps(d, indent=2) + NL)
+
+
+def cmd_upgrade(repo):
+    """Refresh an installed kernel in place. No arguments, no paths to remember.
+
+    ⚠️ Reports what CHANGED, file by file. An upgrade that only prints "done"
+    hides a no-op: you cannot tell an upgrade that worked from one that silently
+    found nothing to do, and the second is what a broken source path looks like.
+    """
+    st = read_stamp(repo)
+    src = st.get("source")
+    if not src:
+        print("  no install stamp at " + STAMP_REL)
+        print("  this repo predates upgrade tracking - run the installer once:")
+        print("    python <agent-root>/scripts/kernel.py install --target .")
+        return 1
+    if not os.path.exists(os.path.join(src, "scripts", "kernel.py")):
+        print("  the kernel source is no longer at:")
+        print("    " + src)
+        print("  move it back, or re-run install from wherever it lives now.")
+        return 1
+
+    print("  installed %s   source %s" % (st.get("version", "?"), VERSION))
+
+    changed, same = [], 0
+    for rel in INSTALL_FILES:
+        a, b = os.path.join(src, rel), os.path.join(repo, rel)
+        if not os.path.exists(a):
+            continue
+        old = io.open(b, "rb").read() if os.path.exists(b) else None
+        new = io.open(a, "rb").read()
+        if old == new:
+            same += 1
+            continue
+        os.makedirs(os.path.dirname(b), exist_ok=True)
+        io.open(b, "wb").write(new)
+        changed.append(("updated" if old is not None else "added", rel))
+
+    for how, rel in changed:
+        print("  %-8s %s" % (how, rel))
+    print("  %d file(s) changed, %d already current" % (len(changed), same))
+
+    # ⭐ The adapter is refreshed THROUGH ITS MARKER, never overwritten. That is
+    # what makes upgrading safe on a repo whose skill was customised: the
+    # generated protocol moves, the repo's own notes below it do not. Without
+    # this, "never overwrite" meant improvements could never arrive at all -
+    # safe and useless, the same trade already fixed for AGENTS.md.
+    ad = os.path.join(repo, ".claude", "skills", "agent-root", "SKILL.md")
+    if not os.path.exists(ad):
+        os.makedirs(os.path.dirname(ad), exist_ok=True)
+        io.open(ad, "w", encoding="utf-8", newline=NL).write(ADAPTER)
+        print("  wrote .claude/skills/agent-root/SKILL.md")
+    else:
+        # ⚠️ THE ADAPTER IS READ FROM THE SOURCE FILE, NOT FROM THIS MODULE'S
+        # ADAPTER CONSTANT. `upgrade` runs the repo's EXISTING kernel.py - the
+        # old code - to install the new one, so every in-memory constant here is
+        # one version behind by definition. Using ADAPTER meant the protocol
+        # section could never actually change: the copy succeeded, the skill
+        # stayed stale, and the output said "upgraded".
+        try:
+            src_text = io.open(os.path.join(src, "scripts", "kernel.py"),
+                               encoding="utf-8").read()
+            body = src_text.split(SECTION_BEGIN % "protocol", 1)[-1]
+            body = body.split(SECTION_END % "protocol", 1)[0].strip(NL)
+        except Exception:
+            body = ADAPTER.split(SECTION_BEGIN % "protocol", 1)[-1]
+            body = body.split(SECTION_END % "protocol", 1)[0].strip(NL)
+        state = write_section(ad, "protocol", body)
+        if state == "updated":
+            print("  updated SKILL.md (protocol section; your notes untouched)")
+        elif state == "unmarked":
+            print("  SKILL.md has no protocol markers, so it was left alone.")
+            print("  To receive future upgrades, wrap the generated part in:")
+            print("    " + SECTION_BEGIN % "protocol")
+            print("    " + SECTION_END % "protocol")
+
+    write_stamp(repo, src)
+    print("")
+    print("  already up to date." if not changed
+          else "  upgraded. Re-run: python scripts/tripwires.py")
+    return 0
+
+
 def cmd_install(root, target):
     """Drop Agent Root into a repository and bring it up. One command.
 
@@ -726,6 +847,7 @@ def cmd_install(root, target):
     # a second copy of the same instructions, free to drift from the first, which
     # is the duplication this project exists to prevent. Assert nothing about
     # another tool's features without reading its documentation.
+    write_stamp(target, root)
     wire_guard(target)
     wf = os.path.join(target, ".github", "workflows", "agent-root.yml")
     os.makedirs(os.path.dirname(wf), exist_ok=True)
@@ -800,8 +922,8 @@ def cmd_check(root: str) -> int:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("command",
-                    choices=["install", "init", "map", "archaeology", "check",
-                             "fleet"])
+                    choices=["install", "upgrade", "init", "map",
+                             "archaeology", "check", "fleet"])
     ap.add_argument("paths", nargs="*",
                     help="for `fleet`: the repos to survey")
     ap.add_argument("--target",
@@ -814,6 +936,8 @@ def main() -> int:
     # several was actively misleading - it read as a heading for the rows below.
     if args.command != "fleet":
         print(f"repo: {root}")
+    if args.command == "upgrade":
+        return cmd_upgrade(os.path.abspath(args.target or root))
     if args.command == "fleet":
         return cmd_fleet(args.paths or [os.getcwd()])
     if args.command == "install":

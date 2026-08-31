@@ -64,6 +64,28 @@ answers only exist in someone who was there.
 pieces. A half-installed reviewer that still reports "installed" is worse than one
 that fails, because you would go on to trust it.
 
+## Upgrading
+
+```bash
+python scripts/kernel.py upgrade
+```
+
+No arguments, no paths to remember: `install` stamps `.claude/agent-root.json`
+with the version and where the kernel came from, and `upgrade` reads it. It
+prints what changed, file by file — an upgrade that only says "done" hides a
+no-op, and you cannot tell one that worked from one whose source path has moved.
+
+⭐ **Your customised skill survives it.** The adapter has a generated region
+between `<!-- agent-root:begin protocol -->` markers and a region below them that
+is yours. Upgrades refresh the first and never touch the second. The previous
+rule — *never overwrite an existing SKILL.md* — was safe and useless: a
+customised skill was frozen at whatever it had on day one.
+
+⚠️ **Upgrade runs the OLD code to install the new**, so the adapter text is read
+from the source file on disk rather than from this module's constant. Using the
+in-memory constant meant the protocol section could never actually change: the
+copy succeeded, the skill stayed stale, and the output said "upgraded".
+
 ## Reviewing a change
 
 `/agent-root` runs **one** command. Not six:

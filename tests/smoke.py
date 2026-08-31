@@ -226,6 +226,23 @@ def main():
                 "hook must not use a relative path - an unresolvable one blocks "
                 "every tool call")
 
+            # ⭐ UPGRADE MUST DELIVER IMPROVEMENTS AND PRESERVE CUSTOMISATION.
+            # "Never overwrite an existing SKILL.md" made install safe and made
+            # upgrades useless - a customised skill was frozen at whatever it
+            # had on day one. The generated protocol lives between markers; the
+            # repo's own notes live below them.
+            skill = os.path.join(dst, ".claude", "skills", "agent-root", "SKILL.md")
+            io.open(skill, "a", encoding="utf-8").write(NL + "MY OWN RULE." + NL)
+            assert os.path.exists(os.path.join(dst, ".claude", "agent-root.json")), \
+                "install must stamp the source so upgrade needs no arguments"
+            r = run(py, os.path.join(dst, "scripts", "kernel.py"),
+                    "upgrade", cwd=dst)
+            assert "already current" in r.stdout or "changed" in r.stdout, \
+                "upgrade printed no file accounting"
+            body = io.open(skill, encoding="utf-8").read()
+            assert "MY OWN RULE." in body, "upgrade destroyed the repo's own notes"
+            assert "agent-root:begin protocol" in body, "protocol markers lost"
+
             # CI guard shipped
             assert os.path.exists(os.path.join(dst, ".github", "workflows",
                                                "agent-root.yml"))
@@ -289,7 +306,7 @@ def main():
             print("  -", f)
         return 1
     print("smoke OK - init, map, archaeology, traps (both marker forms), "
-          "tripwires (idempotent, no mojibake), verify, drift, review, root (one-command), install, guard (blocks+allows+fails open), CI, fleet, sections")
+          "tripwires (idempotent, no mojibake), verify, drift, review, root (one-command), install, upgrade (delivers + preserves), guard (blocks+allows+fails open), CI, fleet, sections")
     return 0
 
 
