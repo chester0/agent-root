@@ -71,7 +71,20 @@ def main():
                 FAIL.append(f"init did not create {f}")
 
         run(py, "scripts/kernel.py", "map", cwd=tmp)
-        run(py, "scripts/kernel.py", "archaeology", cwd=tmp)
+        # ⭐ archaeology mines the FORGE too. The fixture has no remote, so this
+        # exercises the path that matters most: degrading OUT LOUD. A silent
+        # empty section would read as "this repo recorded no decisions" rather
+        # than "I could not look", and those are different claims.
+        ra = run(py, "scripts/kernel.py", "archaeology", cwd=tmp)
+        cand = io.open(os.path.join(tmp, "CANDIDATES.md"), encoding="utf-8").read()
+        assert "Merged PRs" in cand or "could not be read" in cand or \
+               "NOT read" in cand, "forge section missing entirely"
+        # --offline must skip the network and SAY the queue is missing that half
+        run(py, "scripts/kernel.py", "archaeology", "--offline", cwd=tmp)
+        off = io.open(os.path.join(tmp, "CANDIDATES.md"), encoding="utf-8").read()
+        assert "NOT read" in off, "--offline did not state the gap it left"
+        assert "asking GitHub" not in off
+        run(py, "scripts/forge.py", "--limit", "5", cwd=tmp)
         run(py, "scripts/kernel.py", "check", cwd=tmp)
 
         # ⭐ DECISIONS.md is empty after init BY DESIGN, but the queue that
@@ -150,9 +163,16 @@ def main():
         # prose has nothing checking it. Now it does.
         n = len([f for f in os.listdir(os.path.join(ROOT, "scripts"))
                  if f.endswith(".py")])
-        words = {5: "five", 6: "six", 7: "seven", 8: "eight"}
+        # ⚠️ THE TABLE USED TO STOP AT EIGHT. Adding a ninth script made this
+        # check look for "9 Python-stdlib scripts" - a numeral the README would
+        # never contain - so a correct README failed. A check that breaks when
+        # the thing it measures grows is a check people delete.
+        words = {5: "five", 6: "six", 7: "seven", 8: "eight", 9: "nine",
+                 10: "ten", 11: "eleven", 12: "twelve"}
         readme = io.open(os.path.join(ROOT, "README.md"), encoding="utf-8").read()
-        assert ("%s Python-stdlib scripts" % words.get(n, n)) in readme, (
+        assert n in words, (
+            "extend the number-word table in smoke.py: %d scripts now" % n)
+        assert ("%s Python-stdlib scripts" % words[n]) in readme, (
             "README script count is stale: there are %d scripts" % n)
 
         # install into a SECOND repo. This is the headline path - one command
@@ -334,7 +354,7 @@ def main():
         for f in FAIL:
             print("  -", f)
         return 1
-    print("smoke OK - init, map, archaeology, decisions (idempotent stubs), traps (both marker forms), "
+    print("smoke OK - init, map, archaeology (+forge, offline), decisions (idempotent stubs), traps (both marker forms), "
           "tripwires (idempotent, no mojibake), verify, drift, review, root (one-command), install, upgrade (delivers + preserves), guard (blocks+allows+fails open), CI, fleet, sections")
     return 0
 

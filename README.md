@@ -4,7 +4,7 @@
 already wrote *before* it acts, and tells you when the file you are editing is not
 the file that is running.
 
-Five markdown files you own, eight Python-stdlib scripts that maintain them. No
+Five markdown files you own, nine Python-stdlib scripts that maintain them. No
 dependencies, no service, no vector database, no API key.
 
 ---
@@ -28,6 +28,13 @@ questions in `CANDIDATES.md`. It never writes an answer.
 
 Install also generates the per-domain tripwires **from your repo's own trap
 distribution** — real triggers, derived, with no rules invented.
+
+`archaeology` mines local git *and* the forge: merged PRs whose bodies explain a
+choice, and closed issues that describe an incident — each **quoted and cited by
+number and URL**, via `gh`. A PR body is where somebody explained the decision;
+an issue thread is where the incident was described while it was still fresh.
+⚠️ That is a network call, it says so, and `--offline` skips it while stating
+which half of the queue is then missing.
 
 ⭐ **Then just run `/agent-root`.** It triages the queue on its own: It opens the
 commits and the code, answers what the record can settle **with a citation each**,
@@ -93,6 +100,7 @@ may claim what a step that did not run would have shown.
 | `kernel.py decisions` | draft evidenced decision stubs from git history |
 | `kernel.py check` | is anything stale or malformed |
 | `kernel.py fleet <repos>` | one row per repo: traps, kernel state, wired |
+| `forge.py` | mine merged PRs and closed issues via `gh` |
 | `drift.py` | repo versus what is actually running |
 | `verify.py --quick` | do the documented facts still hold |
 | `tripwires.py` | regenerate the per-domain triggers |

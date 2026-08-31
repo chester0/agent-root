@@ -224,7 +224,7 @@ def cmd_map(root: str, scope_all: bool = False) -> int:
 
 
 # ------------------------------------------------------------------- archaeology
-def cmd_archaeology(root: str) -> int:
+def cmd_archaeology(root: str, offline: bool = False) -> int:
     """Mine git for what a human should document. Queues, never conclusions."""
     if not is_git(root):
         print("  not a git repository - there is no history to mine.")
@@ -299,6 +299,31 @@ def cmd_archaeology(root: str) -> int:
             "⭐ **Triage rule:** an entry earns a place in `DECISIONS.md` or a "
             "`⚠️` marker in the file it concerns. If nobody can say why it "
             "mattered, delete the line — an honest blank beats a confident guess."]
+
+    # ⭐ THE FORGE IS PART OF THE RECORD TOO. Git says what changed; a PR body is
+    # where somebody explained the choice, and an issue thread is where the
+    # incident was described while it was still fresh. Mining them is the same
+    # retrieval job, one API call further out - so archaeology is not finished
+    # until it has looked there.
+    #
+    # ⚠️ This makes a NETWORK CALL, and says so. Skipped entirely with --offline,
+    # and it degrades out loud: no gh, no auth, no remote each print one line,
+    # because a silent empty section would read as "this repo recorded no
+    # decisions" rather than "I could not look".
+    if not offline:
+        fp = os.path.join(os.path.dirname(os.path.abspath(__file__)), "forge.py")
+        if os.path.exists(fp):
+            print("  asking GitHub about merged PRs and closed issues...")
+            r = subprocess.run([sys.executable, fp, "--limit", "100"], cwd=root,
+                               capture_output=True, text=True, encoding="utf-8",
+                               errors="replace", timeout=180)
+            if r.stdout.strip():
+                out += ["", "---", "", r.stdout.rstrip()]
+    else:
+        out += ["", "---", "",
+                "⚠️ **Pull requests and issues were NOT read** (--offline). The "
+                "tracker is where decisions and incidents are usually explained, "
+                "so this queue is missing that half. Re-run without --offline."]
 
     io.open(os.path.join(root, "CANDIDATES.md"), "w", encoding="utf-8",
             newline="\n").write("\n".join(out) + "\n")
@@ -531,6 +556,7 @@ INSTALL_FILES = [
     # "blocked", including the two designed to prove fail-open.
     "scripts/guard.py",
     "scripts/root.py",
+    "scripts/forge.py",
     "profiles/devops.py",
 ]
 
@@ -1059,6 +1085,8 @@ def main() -> int:
                     help="for `fleet`: the repos to survey")
     ap.add_argument("--target",
                     help="install Agent Root into this repo")
+    ap.add_argument("--offline", action="store_true",
+                    help="make no network calls (skips PR/issue mining)")
     ap.add_argument("--all", action="store_true",
                     help="map every text file, not just docs and entry points")
     args = ap.parse_args()
@@ -1087,8 +1115,9 @@ def main() -> int:
         return cmd_install(src, tgt)
     if args.command == "map":
         return cmd_map(root, args.all)
-    return {"init": cmd_init, "archaeology": cmd_archaeology,
-            "check": cmd_check}[args.command](root)
+    if args.command == "archaeology":
+        return cmd_archaeology(root, args.offline)
+    return {"init": cmd_init, "check": cmd_check}[args.command](root)
 
 
 if __name__ == "__main__":
