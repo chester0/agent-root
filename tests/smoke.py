@@ -177,12 +177,37 @@ def main():
                                  encoding="utf-8", errors="replace")
             assert bad.returncode == 0, "guard must fail open on bad input"
 
-            # the hook is wired, and wiring twice does not duplicate it
-            st = json.loads(io.open(os.path.join(dst, ".claude", "settings.json"),
-                                    encoding="utf-8").read())
-            n = sum(1 for e in st.get("hooks", {}).get("PreToolUse", [])
-                    if "guard.py" in json.dumps(e))
-            assert n == 1, "expected exactly one guard hook, found %d" % n
+            # ⚠️ NO RULES MEANS NO HOOK. An interlock in a repo with nothing
+            # to enforce is pure risk, and it misfired exactly so: the hook was
+            # wired with a RELATIVE path, and an interpreter that cannot find
+            # its script exits 2 - the block code - so a repo with zero rules
+            # blocked every Write, Edit and Bash it attempted.
+            sp = os.path.join(dst, ".claude", "settings.json")
+            if os.path.exists(sp):
+                st = json.loads(io.open(sp, encoding="utf-8").read())
+                n = sum(1 for e in st.get("hooks", {}).get("PreToolUse", [])
+                        if "guard.py" in json.dumps(e))
+                assert n == 0, "a repo with no rules must have no guard hook"
+
+            # declare a rule, compile it, reinstall - NOW it should wire, and
+            # never with a relative path.
+            io.open(os.path.join(dst, "R.md"), "w", encoding="utf-8").write(
+                "WARNING: no secrets" + NL + "<!-- block: write **/SECRET.md -->" + NL)
+            run("git", "add", "-A", cwd=dst)
+            run("git", "-c", "user.email=t@t", "-c", "user.name=t",
+                "commit", "-qm", "rule", cwd=dst)
+            run(py, os.path.join(dst, "scripts", "tripwires.py"), cwd=dst)
+            run(py, os.path.join(tmp, "scripts", "kernel.py"),
+                "install", "--target", dst, cwd=dst)
+            st = json.loads(io.open(sp, encoding="utf-8").read())
+            entries = [e for e in st.get("hooks", {}).get("PreToolUse", [])
+                       if "guard.py" in json.dumps(e)]
+            assert len(entries) == 1, "expected one guard hook, found %d" % len(entries)
+            cmdline = json.dumps(entries[0])
+            assert "scripts/guard.py" in cmdline
+            assert "CLAUDE_PROJECT_DIR" in cmdline, (
+                "hook must not use a relative path - an unresolvable one blocks "
+                "every tool call")
 
             # CI guard shipped
             assert os.path.exists(os.path.join(dst, ".github", "workflows",

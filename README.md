@@ -259,6 +259,13 @@ it. So: **opt-in only** (nothing is inferred from the wording of existing traps)
 the block, and **always escapable** — the rules are a committed JSON file a human
 can edit or delete.
 
+⭐ **The hook is wired only once a repo declares a rule.** A repo with
+nothing to enforce gets no hook at all — because the failure mode is not
+hypothetical: it shipped with a *relative* command path, and a Python
+interpreter that cannot find its script exits 2, which is the block code. A
+repo with **zero** rules blocked every Write, Edit and Bash. The command is
+now absolute via `$CLAUDE_PROJECT_DIR`, and wired only where it has work to do.
+
 ⭐ **`guard.py` is on the install list as a safety requirement, not a
 convenience.** The hook blocks on exit code 2 — and a Python interpreter that
 cannot find its script *also* exits 2. A missing guard does not fail open, it

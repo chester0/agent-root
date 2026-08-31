@@ -508,7 +508,17 @@ def write_section(path, name, body):
     return "unmarked"
 
 
-GUARD_CMD = "python scripts/guard.py"
+# ⚠️ ABSOLUTE, VIA THE PROJECT-DIR VARIABLE - never a relative path. Hooks do
+# not run with a guaranteed working directory, and `python scripts/guard.py`
+# resolves to nothing from anywhere else. Because a Python interpreter that
+# cannot find its script exits 2, and 2 is the BLOCK code, an unresolvable path
+# does not fail open - it blocks every matching tool call in the repo.
+#
+# ⚠️ Windows caveat, upstream: hook commands run through cmd.exe, which expands
+# %VAR% and not $VAR, so the variable may arrive literal. That is survivable ONLY
+# because the guard is now wired exclusively in repos that have opted into at
+# least one rule - a much smaller blast radius than every install.
+GUARD_CMD = 'python "$CLAUDE_PROJECT_DIR/scripts/guard.py"'
 
 CI_WORKFLOW = """# Agent Root: fail the build when the knowledge layer goes stale.
 # ⭐ kernel.py check has always existed; nothing enforced it, so a stale contract
@@ -599,6 +609,27 @@ def wire_guard(target):
     `settings.local.json` is personal and gitignored. A rule protecting the repo
     belongs in the shared file, where it cannot be silently switched off.
     """
+    # ⚠️ NO RULES, NO HOOK. Wiring an interlock into a repo that has declared
+    # nothing to enforce is all risk and no benefit, and it went wrong exactly
+    # that way: chester0 had ZERO rules, and the hook still blocked every Write,
+    # Edit and Bash - because the command was the RELATIVE path
+    # `python scripts/guard.py`, and from any other working directory the
+    # interpreter cannot find it and exits 2, which is the block code.
+    #
+    # ⭐ The comment warning about this collision was written in this same file,
+    # by the author, before the relative path was shipped anyway. A guard is now
+    # only installed once a repo owns at least one `<!-- block: ... -->` trap.
+    blocks = os.path.join(target, ".claude", "agent-root-blocks.json")
+    has_rules = False
+    if os.path.exists(blocks):
+        try:
+            has_rules = bool(json.loads(
+                io.open(blocks, encoding="utf-8").read() or "{}").get("blocks"))
+        except Exception:
+            has_rules = False
+    if not has_rules:
+        return None                       # nothing to enforce; nothing wired
+
     p = os.path.join(target, ".claude", "settings.json")
     data = {}
     if os.path.exists(p):
