@@ -648,7 +648,7 @@ def wire_guard(target):
         return True                                  # already wired, idempotent
 
     pre.append({
-        "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash",
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash|PowerShell|Shell",
         "hooks": [{"type": "command", "command": GUARD_CMD}],
     })
     os.makedirs(os.path.dirname(p), exist_ok=True)

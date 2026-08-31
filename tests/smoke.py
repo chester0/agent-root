@@ -165,6 +165,16 @@ def main():
                             "tool_input": {"file_path": "SECRET.md"}}) == 2
             assert verdict({"tool_name": "Bash",
                             "tool_input": {"command": "rm -rf /tmp/x"}}) == 2
+            # ⚠️ EVERY SHELL. Inspecting Bash alone left every rule bypassable
+            # by running the same command in PowerShell - which is the PRIMARY
+            # shell on Windows, where this was reported.
+            assert verdict({"tool_name": "PowerShell",
+                            "tool_input": {"command": "rm -rf /tmp/x"}}) == 2
+            # a terminal tool nobody has heard of, recognised by input shape
+            assert verdict({"tool_name": "SomeNewTerminal",
+                            "tool_input": {"command": "rm -rf /tmp/x"}}) == 2
+            assert verdict({"tool_name": "PowerShell",
+                            "tool_input": {"command": "git status"}}) == 0
             assert verdict({"tool_name": "Write",
                             "tool_input": {"file_path": "src/ok.py"}}) == 0
             assert verdict({"tool_name": "Bash",

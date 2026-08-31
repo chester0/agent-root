@@ -51,7 +51,13 @@ for _s in (sys.stdout, sys.stderr):
 RULES_REL = os.path.join(".claude", "agent-root-blocks.json")
 
 WRITE_TOOLS = ("Write", "Edit", "MultiEdit", "NotebookEdit")
-BASH_TOOLS = ("Bash",)
+
+# ⚠️ EVERY SHELL, NOT JUST BASH. The first version inspected Bash alone, which
+# on Windows - where PowerShell is the primary shell - left a rule like "never
+# force-push" bypassable by running the same command in the other shell. A guard
+# with a shell-shaped hole in it is worse than none, because the rule reads as
+# enforced. Any tool whose input carries a `command` is a shell for this purpose.
+SHELL_TOOLS = ("Bash", "PowerShell", "Shell", "Terminal", "Cmd", "Zsh")
 
 ALLOW, BLOCK = 0, 2
 
@@ -150,7 +156,11 @@ def main():
                         sys.stderr.write(explain(r, path))
                         return BLOCK
 
-        if tool in BASH_TOOLS:
+        # ⭐ Fall back on the SHAPE of the input, not just the name. A tool this
+        # list has never heard of but which carries a `command` is a shell, and
+        # treating it as one is the safe default - the alternative is a silent
+        # bypass every time an assistant adds a new terminal tool.
+        if tool in SHELL_TOOLS or (tool not in WRITE_TOOLS and ti.get("command")):
             cmd = ti.get("command") or ""
             if cmd:
                 for r in rules:
