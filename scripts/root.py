@@ -110,6 +110,13 @@ def main():
     ap.add_argument("--pr")
     ap.add_argument("--brief", action="store_true",
                     help="orientation only - skip the diff review")
+    # ⭐ A GUARANTEE, NOT A CONSEQUENCE. Out of the box this tool contacts
+    # nothing: DEPLOYMENTS is empty and drift.py has no host to reach. But
+    # "nothing is configured" is a fact about your config, not a promise about
+    # the tool, and on a work machine the difference matters. --offline is the
+    # promise: the only step that can ever leave the machine is not run at all.
+    ap.add_argument("--offline", action="store_true",
+                    help="make no outbound connections - skips the drift check")
     args = ap.parse_args()
 
     root = git(os.getcwd(), "rev-parse", "--show-toplevel").strip() or os.getcwd()
@@ -146,10 +153,18 @@ def main():
                 "python " + " ".join(["scripts/" + rargs[0]] + rargs[1:]),
                 ok, out, note, limit=60)
 
-    ok, out, note = tool("drift.py", timeout=TIMEOUTS["drift"], cwd=root)
-    steps.append(ok)
-    section("IS THE EDITED COPY THE RUNNING COPY?",
-            "python scripts/drift.py", ok, out, note, limit=14)
+    if args.offline:
+        print(NL + "IS THE EDITED COPY THE RUNNING COPY?")
+        print("  $ (skipped: --offline)")
+        print("  -- not run. This is the ONLY step that can contact another")
+        print("     machine, and you asked it not to. Nothing here has checked")
+        print("     whether a deployed copy differs from the repo.")
+        steps.append(True)
+    else:
+        ok, out, note = tool("drift.py", timeout=TIMEOUTS["drift"], cwd=root)
+        steps.append(ok)
+        section("IS THE EDITED COPY THE RUNNING COPY?",
+                "python scripts/drift.py", ok, out, note, limit=14)
 
     ok, out, note = tool("verify.py", "--quick",
                          timeout=TIMEOUTS["verify"], cwd=root)

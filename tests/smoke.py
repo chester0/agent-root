@@ -115,6 +115,12 @@ def main():
         r = run(py, "scripts/root.py", "--brief", cwd=tmp)
         assert "AGENT ROOT" in r.stdout, "root.py printed no header"
         assert "steps produced output" in r.stdout, "root.py printed no step count"
+        # ⭐ --offline is a promise about the TOOL, not about the config. Assert
+        # that the one network-capable step is genuinely not run, and that its
+        # absence is stated rather than shown as a clean section.
+        ro = run(py, "scripts/root.py", "--brief", "--offline", cwd=tmp)
+        assert "skipped: --offline" in ro.stdout, "--offline did not skip drift"
+        assert "has checked" in ro.stdout, "--offline did not state the gap"
 
         # ⭐ The README states a script count in its first paragraph. It said
         # five while there were six for a whole release, because a number in

@@ -64,6 +64,37 @@ answers only exist in someone who was there.
 pieces. A half-installed reviewer that still reports "installed" is worse than one
 that fails, because you would go on to trust it.
 
+## Does it touch my network?
+
+**Out of the box, no.** A fresh install declares zero deployments, so `drift.py`
+has no host to reach and returns in ~100 ms saying so:
+
+```console
+$ python scripts/drift.py
+—  no deployments declared, so nothing was checked.
+   This is not a pass. Declare them in scripts/kernel_config.py
+```
+
+Nothing else in the kernel opens a socket. `traps.py`, `kernel.py`, `review.py`
+and `tripwires.py` read files and run `git`; `verify.py --quick` skips its port
+predicates by design.
+
+| | |
+|---|---|
+| Hosts shipped in this repo | none — the examples are `*.example.internal`, a reserved documentation domain |
+| Config file with real addresses | `scripts/kernel_config.py`, which **`install` never copies** and this repo does not contain |
+| Steps that can reach another machine | exactly one: `drift.py`, and only for deployments you declare |
+| Explicit off switch | `python scripts/root.py --offline` |
+
+⭐ **`--offline` is a guarantee, not a consequence.** "Nothing is configured" is a
+fact about your config; `--offline` is a promise about the tool — the only step
+that can leave the machine is not run at all, and the report says so rather than
+quietly showing a clean drift section.
+
+⚠️ It says so *loudly*, because a skipped drift check is a real gap: nothing has
+verified that a deployed copy matches the repo. Silence there would be the
+empty-section-reads-as-a-pass failure this project exists to prevent.
+
 ## Upgrading
 
 ```bash
