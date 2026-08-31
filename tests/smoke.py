@@ -85,6 +85,13 @@ def main():
         assert "NOT read" in off, "--offline did not state the gap it left"
         assert "asking GitHub" not in off
         run(py, "scripts/forge.py", "--limit", "5", cwd=tmp)
+        # ⭐ The reviewer's dossier must produce every section even with no
+        # remote and no gh - each one saying what it could not read.
+        rb = run(py, "scripts/brief.py", "--offline", cwd=tmp)
+        for want in ("How it builds", "What gates a merge",
+                     "Who knows which corner", "What reviewers keep saying"):
+            assert want in rb.stdout, "brief.py missing section: " + want
+        assert "not read" in rb.stdout.lower(),             "--offline must state what it skipped"
         run(py, "scripts/kernel.py", "check", cwd=tmp)
 
         # ⭐ DECISIONS.md is empty after init BY DESIGN, but the queue that
@@ -148,13 +155,13 @@ def main():
         # ⭐ The single opening move. It must ALWAYS exit 0 and always print a
         # step count - it is what /agent-root runs, and an entry point that can
         # fail hard leaves the agent with nothing and no reason.
-        r = run(py, "scripts/root.py", "--brief", cwd=tmp)
+        r = run(py, "scripts/root.py", "--orient", cwd=tmp)
         assert "AGENT ROOT" in r.stdout, "root.py printed no header"
         assert "steps produced output" in r.stdout, "root.py printed no step count"
         # ⭐ --offline is a promise about the TOOL, not about the config. Assert
         # that the one network-capable step is genuinely not run, and that its
         # absence is stated rather than shown as a clean section.
-        ro = run(py, "scripts/root.py", "--brief", "--offline", cwd=tmp)
+        ro = run(py, "scripts/root.py", "--orient", "--offline", cwd=tmp)
         assert "skipped: --offline" in ro.stdout, "--offline did not skip drift"
         assert "has checked" in ro.stdout, "--offline did not state the gap"
 
@@ -355,7 +362,7 @@ def main():
             print("  -", f)
         return 1
     print("smoke OK - init, map, archaeology (+forge, offline), decisions (idempotent stubs), traps (both marker forms), "
-          "tripwires (idempotent, no mojibake), verify, drift, review, root (one-command), install, upgrade (delivers + preserves), guard (blocks+allows+fails open), CI, fleet, sections")
+          "tripwires (idempotent, no mojibake), verify, drift, review, root (one-command), brief (dossier), install, upgrade (delivers + preserves), guard (blocks+allows+fails open), CI, fleet, sections")
     return 0
 
 

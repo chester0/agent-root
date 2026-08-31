@@ -557,6 +557,7 @@ INSTALL_FILES = [
     "scripts/guard.py",
     "scripts/root.py",
     "scripts/forge.py",
+    "scripts/brief.py",
     "profiles/devops.py",
 ]
 

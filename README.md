@@ -4,7 +4,7 @@
 already wrote *before* it acts, and tells you when the file you are editing is not
 the file that is running.
 
-Five markdown files you own, nine Python-stdlib scripts that maintain them. No
+Five markdown files you own, ten Python-stdlib scripts that maintain them. No
 dependencies, no service, no vector database, no API key.
 
 ---
@@ -61,7 +61,7 @@ yours. Upgrades refresh the first and never touch the second.
 python scripts/root.py                 # orient + review the working tree
 python scripts/root.py --commit HEAD   # one commit
 python scripts/root.py --pr 42         # a pull request (needs gh)
-python scripts/root.py --brief         # orientation only
+python scripts/root.py --orient        # orientation only
 python scripts/root.py --offline       # make no outbound connections
 ```
 
@@ -100,12 +100,41 @@ may claim what a step that did not run would have shown.
 | `kernel.py decisions` | draft evidenced decision stubs from git history |
 | `kernel.py check` | is anything stale or malformed |
 | `kernel.py fleet <repos>` | one row per repo: traps, kernel state, wired |
+| `brief.py` | the reviewer's dossier: how it ships, what gates a merge, who knows what, what reviewers keep saying |
 | `forge.py` | mine merged PRs and closed issues via `gh` |
 | `drift.py` | repo versus what is actually running |
 | `verify.py --quick` | do the documented facts still hold |
 | `tripwires.py` | regenerate the per-domain triggers |
 
 ---
+
+## The reviewer's brief
+
+On a work repo with ten thousand commits, a queue of candidates is longer than
+anyone will read. `brief.py` produces the other thing — what a senior engineer
+knows *before* reviewing anything:
+
+```bash
+python scripts/brief.py --out BRIEF.md
+```
+
+| Section | Answers |
+|---|---|
+| How it builds, tests and ships | detected stack, the scripts people run, and ⚠️ **which workflow actually deploys** |
+| What gates a merge | CODEOWNERS rules, branch protection, required checks |
+| Who knows which corner | top authors per area — where to *ask*, not who decides |
+| What reviewers keep saying | ⭐ recurring themes from **PR review comments**, deduped and counted |
+
+⭐ **The review-comments section is the one nothing else has.** A PR review is
+where a senior engineer writes "don't do that, because" while it is still
+specific — and git never records it. On a real repo it surfaced a house
+convention stated twice, a logic bug caught in review, and a security
+requirement blocking a merge.
+
+⚠️ Every section is derived and cited. None of it summarises what the code
+*does* — that is the auto-summary this project refuses to write.
+
+Measured: 17 s on a 2,500-file repo.
 
 ## What it actually does
 

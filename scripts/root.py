@@ -4,7 +4,7 @@
     python scripts/root.py                 # orient + review the working tree
     python scripts/root.py --commit HEAD   # a commit
     python scripts/root.py --pr 42         # a pull request
-    python scripts/root.py --brief         # orientation only, no diff
+    python scripts/root.py --orient        # orientation only, no diff
 
 WHY ONE COMMAND. The skill used to list six commands and trust the agent to run
 them in order. That is the same weakness as a tripwire being a prompt: it depends
@@ -108,7 +108,10 @@ def main():
     ap.add_argument("--commit")
     ap.add_argument("--range")
     ap.add_argument("--pr")
-    ap.add_argument("--brief", action="store_true",
+    # ⚠️ Renamed from --brief. scripts/brief.py produces the reviewer's DOSSIER,
+    # and "--brief" here meant the opposite - do less. Two things one word apart
+    # meaning opposite amounts of work is a trap somebody walks into once.
+    ap.add_argument("--orient", "--brief", dest="orient", action="store_true",
                     help="orientation only - skip the diff review")
     # ⭐ A GUARANTEE, NOT A CONSEQUENCE. Out of the box this tool contacts
     # nothing: DEPLOYMENTS is empty and drift.py has no host to reach. But
@@ -141,7 +144,7 @@ def main():
     section("WHERE THE SURPRISES LIVE  (base rates, not findings)",
             "python scripts/traps.py --domains", ok, out, note, limit=16)
 
-    if not args.brief:
+    if not args.orient:
         rargs = ["review.py"]
         for flag, val in (("--commit", args.commit), ("--range", args.range),
                           ("--pr", args.pr)):
