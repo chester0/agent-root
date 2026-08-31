@@ -109,6 +109,13 @@ def main():
         run(py, "scripts/review.py", cwd=tmp)          # working tree
         run(py, "scripts/review.py", "--commit", "HEAD", cwd=tmp)
 
+        # ⭐ The single opening move. It must ALWAYS exit 0 and always print a
+        # step count - it is what /agent-root runs, and an entry point that can
+        # fail hard leaves the agent with nothing and no reason.
+        r = run(py, "scripts/root.py", "--brief", cwd=tmp)
+        assert "AGENT ROOT" in r.stdout, "root.py printed no header"
+        assert "steps produced output" in r.stdout, "root.py printed no step count"
+
         # ⭐ The README states a script count in its first paragraph. It said
         # five while there were six for a whole release, because a number in
         # prose has nothing checking it. Now it does.
@@ -282,7 +289,7 @@ def main():
             print("  -", f)
         return 1
     print("smoke OK - init, map, archaeology, traps (both marker forms), "
-          "tripwires (idempotent, no mojibake), verify, drift, review, install, guard (blocks+allows+fails open), CI, fleet, sections")
+          "tripwires (idempotent, no mojibake), verify, drift, review, root (one-command), install, guard (blocks+allows+fails open), CI, fleet, sections")
     return 0
 
 

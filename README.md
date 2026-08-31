@@ -4,7 +4,7 @@
 allows read the traps you already wrote — *before* acting — and tells you when
 the file you are editing is not the one that is running.
 
-Five markdown files you own, seven Python-stdlib scripts that maintain them. No
+Five markdown files you own, eight Python-stdlib scripts that maintain them. No
 dependencies, no service, no vector database, no API key.
 
 ---
@@ -66,7 +66,25 @@ that fails, because you would go on to trust it.
 
 ## Reviewing a change
 
-Root does not judge from the diff alone. `review.py` gathers the receipts first:
+`/agent-root` runs **one** command. Not six:
+
+```bash
+python scripts/root.py                 # orient + review the working tree
+python scripts/root.py --commit HEAD   # a commit
+python scripts/root.py --pr 42         # a pull request
+```
+
+⭐ **The sequence lives in code, not in the skill's prose.** Listing six commands
+and trusting the agent to run them in order is the same weakness as a tripwire
+being a prompt: an agent that runs four of six and answers confidently produces
+output indistinguishable from one that ran all six.
+
+⚠️ **Every step has a timeout, and a step that fails says so.** `drift.py`
+contacts real hosts; a sleeping laptop used to mean the opening move sat there
+with nothing on screen. Now it reports `TIMED OUT after 45s` — a finding, not
+silence — and the footer counts how many steps actually produced output.
+
+Underneath, `review.py` is still the gatherer and can be run alone:
 
 ```bash
 python scripts/review.py                 # uncommitted working tree

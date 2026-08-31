@@ -420,16 +420,26 @@ any assistant can follow. Read it first, then `AGENTS.md` for this repo's facts.
 file answers `/agent-root` in Claude Code and in Copilot, and both load it
 automatically when the description matches the task.
 
-## Gather the evidence, then judge it
+## Run this. It is the whole opening move.
 
 ```bash
-python scripts/review.py                 # the working tree
-python scripts/review.py --commit HEAD   # a commit
-python scripts/review.py --pr 42         # a pull request (needs gh)
+python scripts/root.py                 # orient + review the working tree
+python scripts/root.py --commit HEAD   # a commit
+python scripts/root.py --pr 42         # a pull request (needs gh)
+python scripts/root.py --brief         # orientation only
 ```
 
-That command fills the receipt fields. Your job is the verdict, not the
-gathering - and a verdict without a receipt is not a verdict.
+ONE command, not six. It calibrates the kernel, loads the trap weight table,
+scopes the traps to what changed, checks whether the edited files are the running
+ones, and re-tests the documented facts - each with a timeout, each reporting its
+own failure.
+
+⚠️ **Read what it says it could NOT do.** A step that times out or is missing
+prints a line saying so, and the footer counts how many steps produced output.
+A verdict must never claim what a step that did not run would have shown.
+
+Your job is the verdict, not the gathering - and a verdict without a receipt is
+not a verdict.
 '''
 
 COPILOT = """Read `AGENTS.md` in the repository root before answering or editing,
@@ -464,6 +474,7 @@ INSTALL_FILES = [
     # if it never runs. Measured: with guard.py absent, all eight test cases
     # "blocked", including the two designed to prove fail-open.
     "scripts/guard.py",
+    "scripts/root.py",
     "profiles/devops.py",
 ]
 
