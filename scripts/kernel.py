@@ -410,16 +410,18 @@ def cmd_init(root: str) -> int:
     # ⚠️ The split is what is PROVABLE from the record versus what only a person
     # knows. An agent that cites a commit is doing its job; an agent that writes
     # "this module handles authentication" is doing the damage.
-    print("  Next:")
-    print("   1. Run /agent-root and ask it to triage CANDIDATES.md.")
-    print("      It answers what it can PROVE from git and the code, citing each")
-    print("      one, and hands back only the questions that need a human.")
-    print("   2. Answer those. They are the ones nobody else can.")
-    print("   3. Write the 'What this repo is' paragraph in AGENTS.md yourself -")
-    print("      it is the one thing no evidence contains.")
-    print("   4. Leave the operating rules EMPTY until an incident earns one.")
-    print("   5. Run: python scripts/tripwires.py   (Claude + Copilot tripwires)")
-    print("      then: python scripts/traps.py --domains")
+    # ⭐ EVERY MECHANICAL STEP RUNS HERE. This used to end with a numbered chore
+    # list, which is an odd thing for a tool whose entire pitch is that the agent
+    # should do the work. Anything derivable from the repo is derived now; what
+    # is left for a person is only what no evidence contains.
+    subprocess.run([sys.executable, os.path.join(root, "scripts", "tripwires.py"),
+                    "--auto"], cwd=os.getcwd(), capture_output=True)
+    print("")
+    print("  Now just run:  /agent-root")
+    print("")
+    print("  It will triage CANDIDATES.md on its own - answering what it can")
+    print("  PROVE from git and the code, citing each one - and come back with")
+    print("  only the questions no record can settle. Those are yours.")
     return 0
 
 
@@ -994,8 +996,6 @@ def cmd_install(root, target):
         cmd_init(target)
     finally:
         os.chdir(cwd)
-    print("")
-    print("  Agent Root is installed. Now:  /agent-root")
     return 0
 
 

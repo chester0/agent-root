@@ -26,7 +26,10 @@ history and seeds `AGENTS.md`, `MAP.md`, `CANDIDATES.md`, `DECISIONS.md` and
 changed together and which commits smell like reverts, and writes those as
 questions in `CANDIDATES.md`. It never writes an answer.
 
-⭐ **Then invoke `/agent-root` and ask it to triage that queue.** It opens the
+Install also generates the per-domain tripwires **from your repo's own trap
+distribution** — real triggers, derived, with no rules invented.
+
+⭐ **Then just run `/agent-root`.** It triages the queue on its own: It opens the
 commits and the code, answers what the record can settle **with a citation each**,
 and hands back only the questions that need someone who was there. That is not
 auto-summary — it is the retrieval this tool exists for. What it cannot cite, it

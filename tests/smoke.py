@@ -106,6 +106,13 @@ def main():
             if f"{ext} trap must be seen" not in allout:
                 FAIL.append(f"{ext} marker NOT found - traps.py is blind to that file type")
 
+        # ⭐ --auto derives the manifest from the repo's OWN traps, so install
+        # can generate real triggers without seeding the example domains. The
+        # fixture has markers in several files, so it must produce something.
+        ra = run(py, "scripts/tripwires.py", "--auto", cwd=tmp)
+        assert "derived" in ra.stdout or "no domain with 3+" in ra.stdout, \
+            "--auto neither derived domains nor explained why not"
+
         run(py, "scripts/tripwires.py", cwd=tmp)
         run(py, "scripts/tripwires.py", "--check", cwd=tmp)     # must be idempotent
         for f in (".claude/skills", ".github/instructions"):
