@@ -51,6 +51,12 @@ python scripts/kernel.py upgrade
 No arguments. Install stamps `.claude/agent-root.json` with the version and where
 the kernel came from; upgrade reads it and prints what changed, file by file.
 
+⭐ **Upgrade also repairs.** If an older install left a broken guard hook — a
+relative command path denies *every* tool call, because an interpreter that
+cannot find its script exits 2, the block code — `upgrade` removes it (no rules
+declared) or rewrites it to the absolute form (rules declared), and leaves the
+rest of your settings untouched.
+
 ⭐ **Your customised skill survives.** The adapter has a generated region between
 `<!-- agent-root:begin protocol -->` markers, and a region below them that is
 yours. Upgrades refresh the first and never touch the second.

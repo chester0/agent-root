@@ -690,6 +690,81 @@ def cmd_fleet(paths):
     return 0
 
 
+def heal_guard(target, quiet=False):
+    """Remove or repair a guard hook that should not be there. Runs before wiring.
+
+    ⚠️ THIS EXISTS BECAUSE UPGRADE COULD NOT FIX ITS OWN BUG. An early version
+    wired the hook with the RELATIVE command `python scripts/guard.py`. Hooks get
+    no guaranteed working directory, so from anywhere else the interpreter cannot
+    find the script and exits 2 - which is the BLOCK code. Every Python call in
+    that repo was denied by a guard that never ran.
+
+    ⭐ The fix shipped, and reached nobody. `wire_guard` only ever ADDED an entry;
+    nothing inspected one that was already there. So a repo installed during the
+    broken window stayed broken through every subsequent upgrade, and the tool
+    was structurally incapable of repairing the damage it had done. A migration
+    is not optional when the bug is in something you WROTE into the user's repo.
+
+    Three cases, all decided from the settings file itself:
+      - hook present, no rules declared  -> remove it (nothing to enforce)
+      - hook present, command is relative -> repair it to the absolute form
+      - anything else                     -> leave it exactly alone
+    """
+    p = os.path.join(target, ".claude", "settings.json")
+    if not os.path.exists(p):
+        return False
+    try:
+        data = json.loads(io.open(p, encoding="utf-8").read() or "{}")
+    except Exception:
+        # ⚠️ Unreadable settings are never rewritten. Destroying configuration we
+        # could not parse would be a worse bug than the one being fixed.
+        return False
+
+    pre = (data.get("hooks") or {}).get("PreToolUse") or []
+    ours = [e for e in pre if "guard.py" in json.dumps(e)]
+    if not ours:
+        return False
+
+    blocks = os.path.join(target, ".claude", "agent-root-blocks.json")
+    has_rules = False
+    if os.path.exists(blocks):
+        try:
+            has_rules = bool(json.loads(
+                io.open(blocks, encoding="utf-8").read() or "{}").get("blocks"))
+        except Exception:
+            has_rules = False
+
+    changed, action = False, ""
+    if not has_rules:
+        pre = [e for e in pre if "guard.py" not in json.dumps(e)]
+        changed, action = True, ("removed the guard hook - this repo declares no "
+                                 "interlocks, so it could only ever misfire")
+    else:
+        for e in ours:
+            for h in (e.get("hooks") or []):
+                cmd = h.get("command", "")
+                if "guard.py" in cmd and "CLAUDE_PROJECT_DIR" not in cmd:
+                    h["command"] = GUARD_CMD
+                    changed = True
+        if changed:
+            action = ("repaired the guard hook: the command was a RELATIVE path, "
+                      "which blocks every tool call when it cannot be resolved")
+
+    if not changed:
+        return False
+
+    data.setdefault("hooks", {})["PreToolUse"] = pre
+    if not data["hooks"]["PreToolUse"]:
+        data["hooks"].pop("PreToolUse", None)
+    if not data.get("hooks"):
+        data.pop("hooks", None)
+    io.open(p, "w", encoding="utf-8", newline=NL).write(
+        json.dumps(data, indent=2, ensure_ascii=False) + NL)
+    if not quiet:
+        print("  ⚠️ " + action)
+    return True
+
+
 def wire_guard(target):
     """Register the PreToolUse interlock, MERGING into any existing settings.
 
@@ -942,6 +1017,9 @@ def cmd_upgrade(repo):
             print("    " + SECTION_BEGIN % "protocol")
             print("    " + SECTION_END % "protocol")
 
+    # ⭐ Heal BEFORE stamping, so an upgrade repairs a hook this tool wrote
+    # wrong. Shipping a fix that never reaches the repos it broke is not a fix.
+    heal_guard(repo)
     write_stamp(repo, src)
     print("")
     print("  already up to date." if not changed
@@ -1008,6 +1086,7 @@ def cmd_install(root, target):
     # is the duplication this project exists to prevent. Assert nothing about
     # another tool's features without reading its documentation.
     write_stamp(target, root)
+    heal_guard(target)
     wire_guard(target)
     wf = os.path.join(target, ".github", "workflows", "agent-root.yml")
     os.makedirs(os.path.dirname(wf), exist_ok=True)

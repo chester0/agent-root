@@ -299,6 +299,40 @@ def main():
             assert "MY OWN RULE." in body, "upgrade destroyed the repo's own notes"
             assert "agent-root:begin protocol" in body, "protocol markers lost"
 
+            # ⭐ UPGRADE MUST HEAL A HOOK THIS TOOL WROTE WRONG. An early version
+            # wired a RELATIVE guard command; an interpreter that cannot find its
+            # script exits 2, which is the block code, so every Python call in
+            # that repo was denied. The fix shipped and reached nobody, because
+            # wire_guard only ever ADDED. A migration is not optional when the
+            # bug is in something you wrote into the user's repo.
+            sp2 = os.path.join(dst, ".claude", "settings.json")
+            io.open(sp2, "w", encoding="utf-8").write(json.dumps({
+                "permissions": {"allow": ["Bash(ls:*)"]},
+                "hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [
+                    {"type": "command", "command": "python scripts/guard.py"}]}]}}))
+            run(py, os.path.join(dst, "scripts", "kernel.py"), "upgrade", cwd=dst)
+            healed = json.loads(io.open(sp2, encoding="utf-8").read())
+            left = [e for e in healed.get("hooks", {}).get("PreToolUse", [])
+                    if "guard.py" in json.dumps(e)]
+            # ⚠️ This fixture HAS a declared rule by now, so the correct healing
+            # is REPAIR, not removal - the first version of this assertion
+            # expected removal and failed against correct behaviour.
+            assert len(left) == 1, "a repo WITH rules should keep its guard hook"
+            assert "CLAUDE_PROJECT_DIR" in json.dumps(left[0]), \
+                "the relative command was not repaired - it still blocks everything"
+            assert healed.get("permissions"), "healing destroyed other settings"
+
+            # and with the rules removed, the hook must go entirely
+            os.remove(os.path.join(dst, ".claude", "agent-root-blocks.json"))
+            io.open(sp2, "w", encoding="utf-8").write(json.dumps({
+                "hooks": {"PreToolUse": [{"matcher": "Bash", "hooks": [
+                    {"type": "command", "command": "python scripts/guard.py"}]}]}}))
+            run(py, os.path.join(dst, "scripts", "kernel.py"), "upgrade", cwd=dst)
+            gone = json.loads(io.open(sp2, encoding="utf-8").read())
+            assert not [e for e in gone.get("hooks", {}).get("PreToolUse", [])
+                        if "guard.py" in json.dumps(e)], \
+                "a repo with no rules must end up with no guard hook"
+
             # CI guard shipped
             assert os.path.exists(os.path.join(dst, ".github", "workflows",
                                                "agent-root.yml"))
@@ -362,7 +396,7 @@ def main():
             print("  -", f)
         return 1
     print("smoke OK - init, map, archaeology (+forge, offline), decisions (idempotent stubs), traps (both marker forms), "
-          "tripwires (idempotent, no mojibake), verify, drift, review, root (one-command), brief (dossier), install, upgrade (delivers + preserves), guard (blocks+allows+fails open), CI, fleet, sections")
+          "tripwires (idempotent, no mojibake), verify, drift, review, root (one-command), brief (dossier), install, upgrade (delivers, preserves, heals), guard (blocks+allows+fails open), CI, fleet, sections")
     return 0
 
 
